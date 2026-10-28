@@ -26,10 +26,13 @@ result is claimed below. See [Proof](#proof) and [docs/INTEGRATIONS.md](docs/INT
 
 1. **Sealed picks** — `sha256(canonical(pick))` plus the full payload, committed before the
    event. Public views redact content until reveal; only the owner can reveal or resolve.
+   The Walrus commit memory contains the market, commitment hash and timestamp only; a
+   separate reveal memory writes the selection and odds after the pick is opened.
 2. **Resolution and scoring** — owner-supplied `sourceUrl` and `resolvedAt`, Brier score,
    recency-weighted credibility, Wilson lower bound, calibration bins, and bias patterns.
-3. **Memory-driven recommendations** — Walrus Memory is recalled before a new pick. Warnings
-   cite the exact memory text, blob ID and cosine distance; paid-source ROI is included.
+3. **Memory-driven recommendations** — Walrus Memory is recalled before a new pick. Each
+   warning cites the exact blob and cosine distance from the parsed memory that produced
+   it; paid-source ROI is included.
 4. **x402 premium signals on Sui** — seller paywall with Tentacle Pay facilitator, buyer
    agent using `@x402/fetch`, Tatum verification before the payload leaves the server,
    idempotent receipts, and payment/source-ROI memories.
@@ -150,6 +153,9 @@ Key constraints:
 - `payments.digest` is unique, making settlement recording and buyer claiming idempotent.
 - `signals(provider, externalRef)` is unique, so provider re-ingestion updates the listing.
 - `memory_writes` is an audit trail only; `/memory` reads the relayer.
+- Walrus memory kinds are split by lifecycle: `pick_commit` (market, hash, timestamp),
+  `pick_reveal` (selection, odds, reveal time), then `outcome`, `bias`, `source_roi`,
+  `payment` and `preference`. Legacy `pick` records remain readable and are never written.
 
 Generate a migration after schema changes:
 

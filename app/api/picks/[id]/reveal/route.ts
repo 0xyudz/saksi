@@ -28,6 +28,7 @@ export async function POST(
     return jsonResponse(
       {
         verified: revealed.verified,
+        memory: { blobId: revealed.revealMemoryBlobId },
         pick: presentPick({
           pick: detail.pick,
           viewerId: userId,

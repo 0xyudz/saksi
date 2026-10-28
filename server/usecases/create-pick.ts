@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getDb } from "@/db/client";
 import { analysts, picks, type PickRow } from "@/db/schema";
 import { remember } from "@/integrations/walrus-memory/client";
-import { buildPickMemory } from "@/integrations/walrus-memory/schema";
+import { buildPickCommitMemory } from "@/integrations/walrus-memory/schema";
 import { AppError } from "@/lib/errors";
 import { errorForLog, getLogger } from "@/lib/logger";
 import { nowIso } from "@/lib/time";
@@ -85,12 +85,11 @@ export async function createPick(userId: string, input: CreatePickInput): Promis
     throw new AppError("INTERNAL", "The pick could not be persisted.");
   }
 
-  const memory = buildPickMemory({
+  const memory = buildPickCommitMemory({
     id: pick.id,
     analyst: pick.analystId,
     market: pick.market,
-    selection: pick.selection,
-    odds: pick.odds,
+    commitmentHash,
     committedAt,
   });
 

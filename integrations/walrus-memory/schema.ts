@@ -6,14 +6,18 @@ import { MEMORY_FORMAT_PREFIX } from "@/lib/config";
  * Walrus Memory stores plain text. Saksi uses one deterministic, single-line format
  * so a memory can be validated, parsed and cited later:
  *
- *   saksi:v1|type=pick|id=<uuid>|analyst=<id>|market=<market>|selection=<selection>|odds=<odds>|committedAt=<iso>
+ *   saksi:v1|type=pick_commit|id=<uuid>|analyst=<id>|market=<market>|commitmentHash=<hash>|committedAt=<iso>
+ *   saksi:v1|type=pick_reveal|id=<uuid>|selection=<selection>|odds=<odds>|revealedAt=<iso>
  *
- * `|`, `%` and newlines are percent-escaped inside values. Builders validate the text
- * they produce, so an invalid memory cannot reach the relayer.
+ * `type=pick` is read-only legacy data from before the commit/reveal split. New writes
+ * never use it. `|`, `%` and newlines are percent-escaped inside values. Builders
+ * validate the text they produce, so an invalid memory cannot reach the relayer.
  */
 
 export const MEMORY_KINDS = [
   "pick",
+  "pick_commit",
+  "pick_reveal",
   "outcome",
   "bias",
   "source_roi",
@@ -40,6 +44,21 @@ const pickSchema = z.strictObject({
   selection: z.string().min(1).max(200),
   odds: z.coerce.number().gt(1).max(1000),
   committedAt: isoDate,
+});
+
+const pickCommitSchema = z.strictObject({
+  id: z.string().uuid(),
+  analyst: z.string().uuid(),
+  market: z.string().min(1).max(200),
+  commitmentHash: z.string().regex(/^[a-f0-9]{64}$/, "expected a SHA-256 hex digest"),
+  committedAt: isoDate,
+});
+
+const pickRevealSchema = z.strictObject({
+  id: z.string().uuid(),
+  selection: z.string().min(1).max(200),
+  odds: z.coerce.number().gt(1).max(1000),
+  revealedAt: isoDate,
 });
 
 const outcomeSchema = z.strictObject({
@@ -79,6 +98,8 @@ const paymentSchema = z.strictObject({
 
 type ParsedBase =
   | ({ readonly kind: "pick" } & z.infer<typeof pickSchema>)
+  | ({ readonly kind: "pick_commit" } & z.infer<typeof pickCommitSchema>)
+  | ({ readonly kind: "pick_reveal" } & z.infer<typeof pickRevealSchema>)
   | ({ readonly kind: "outcome" } & z.infer<typeof outcomeSchema>)
   | ({ readonly kind: "bias" } & z.infer<typeof biasSchema>)
   | ({ readonly kind: "source_roi" } & z.infer<typeof sourceRoiSchema>)
@@ -150,6 +171,14 @@ function parseFields(kind: MemoryKind, fields: Record<string, string>): ParsedBa
       const result = pickSchema.safeParse(fields);
       return result.success ? { kind: "pick", ...result.data } : null;
     }
+    case "pick_commit": {
+      const result = pickCommitSchema.safeParse(fields);
+      return result.success ? { kind: "pick_commit", ...result.data } : null;
+    }
+    case "pick_reveal": {
+      const result = pickRevealSchema.safeParse(fields);
+      return result.success ? { kind: "pick_reveal", ...result.data } : null;
+    }
     case "outcome": {
       const result = outcomeSchema.safeParse(fields);
       return result.success ? { kind: "outcome", ...result.data } : null;
@@ -183,6 +212,7 @@ export function memoryKind(text: string): MemoryKind | null {
   return parseMemory(text)?.kind ?? null;
 }
 
+/** Legacy builder kept only so old test fixtures can round-trip. Runtime never writes it. */
 export function buildPickMemory(input: z.infer<typeof pickSchema>): BuiltMemory {
   return assemble("pick", [
     ["id", input.id],
@@ -191,6 +221,25 @@ export function buildPickMemory(input: z.infer<typeof pickSchema>): BuiltMemory 
     ["selection", input.selection],
     ["odds", input.odds.toString()],
     ["committedAt", input.committedAt],
+  ]);
+}
+
+export function buildPickCommitMemory(input: z.infer<typeof pickCommitSchema>): BuiltMemory {
+  return assemble("pick_commit", [
+    ["id", input.id],
+    ["analyst", input.analyst],
+    ["market", input.market],
+    ["commitmentHash", input.commitmentHash],
+    ["committedAt", input.committedAt],
+  ]);
+}
+
+export function buildPickRevealMemory(input: z.infer<typeof pickRevealSchema>): BuiltMemory {
+  return assemble("pick_reveal", [
+    ["id", input.id],
+    ["selection", input.selection],
+    ["odds", input.odds.toString()],
+    ["revealedAt", input.revealedAt],
   ]);
 }
 
