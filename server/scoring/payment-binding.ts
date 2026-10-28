@@ -39,8 +39,7 @@ export function normalizeResourceUrl(value: string): string {
  * Rejects a digest that is already recorded for a different signal or resource.
  * Legacy rows with `resource === null` remain valid while the signal id matches.
  */
-export function assertSettlementMatchesSignal(input: SettlementBindingInput): void {
-  const { existingPayment, requestedSignalId, expectedResource } = input;
+export function assertSettlementMatchesSignal(input: SettlementBindingInput): void {  const { existingPayment, requestedSignalId, expectedResource } = input;
 
   if (existingPayment.signalId !== requestedSignalId) {
     throw new AppError(
@@ -59,5 +58,18 @@ export function assertSettlementMatchesSignal(input: SettlementBindingInput): vo
       "CONFLICT",
       "This settlement digest was paid for a different x402 resource.",
     );
+  }
+}
+
+/**
+ * The x402 route config is static while the signal row stores the price at ingestion
+ * time. Refuse to settle when those disagree instead of charging a stale amount.
+ */
+export function assertSignalPriceMatches(
+  signalPriceAtomic: bigint,
+  configuredPriceAtomic: bigint,
+): void {
+  if (signalPriceAtomic !== configuredPriceAtomic) {
+    throw new AppError("CONFLICT", "Signal price is stale; re-ingest the signal.");
   }
 }

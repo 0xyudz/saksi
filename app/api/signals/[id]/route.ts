@@ -3,10 +3,15 @@ import type { NextRequest } from "next/server";
 import { z } from "zod";
 
 import { REQUEST_ID_HEADER } from "@/lib/config";
+import { getEnv } from "@/lib/env";
 import { AppError } from "@/lib/errors";
 import { handleRoute, jsonResponse } from "@/lib/http";
+import { toJsonObject } from "@/lib/json";
+import { parsePriceToAtomic } from "@/lib/price";
 import { authorizePayment } from "@/integrations/x402/seller";
 import { optionalApiUserId } from "@/server/auth";
+import { assertSignalPriceMatches } from "@/server/scoring/payment-binding";
+import { getSignal } from "@/server/usecases/ingest-signal";
 import { verifyAndRecordSignalPayment } from "@/server/usecases/purchase-signal";
 
 export const dynamic = "force-dynamic";
@@ -37,6 +42,11 @@ export async function GET(
     const parsed = idSchema.safeParse((await params).id);
     if (!parsed.success) throw new AppError("VALIDATION_FAILED", "Invalid signal id.");
 
+    // Read the signal and validate its price before the facilitator settles anything,
+    // so an unknown or stale listing cannot take the buyer's money first.
+    const signal = await getSignal(parsed.data);
+    assertSignalPriceMatches(signal.priceAtomic, parsePriceToAtomic(getEnv().X402_PRICE));
+
     const authorization = await authorizePayment(request);
     if (authorization.kind === "payment-required") {
       return paymentResponse(authorization.result.response, requestId);
@@ -51,6 +61,9 @@ export async function GET(
     const verified = await verifyAndRecordSignalPayment({
       signalId: parsed.data,
       digest,
+      signal,
+      resource: authorization.resource,
+      requirements: toJsonObject(authorization.paymentRequirements),
       ...(userId === undefined ? {} : { userId }),
     });
 

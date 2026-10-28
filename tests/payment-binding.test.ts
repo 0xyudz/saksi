@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { AppError } from "@/lib/errors";
 import {
   assertSettlementMatchesSignal,
+  assertSignalPriceMatches,
   normalizeResourceUrl,
 } from "@/server/scoring/payment-binding";
 
@@ -90,5 +91,18 @@ describe("settlement binding", () => {
         expectedResource: `https://saksi.example/api/signals/${SIGNAL_A}`,
       }),
     ).not.toThrow();
+  });
+});
+
+describe("signal price binding", () => {
+  it("accepts a signal whose stored price matches the configured x402 price", () => {
+    expect(() => assertSignalPriceMatches(10_000n, 10_000n)).not.toThrow();
+  });
+
+  it("rejects a stale stored price before settlement", () => {
+    const error = rejection(() => assertSignalPriceMatches(5_000n, 10_000n));
+
+    expect(error.code).toBe("CONFLICT");
+    expect(error.message).toContain("stale");
   });
 });
