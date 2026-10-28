@@ -1,0 +1,8 @@
+node_modules
+.next
+out
+coverage
+pnpm-lock.yaml
+db/migrations
+next-env.d.ts
+*.tsbuildinfo
