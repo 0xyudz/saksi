@@ -1,3 +1,4 @@
+import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
 import { z } from "zod";
 
 const nonEmpty = z.string().min(1);
@@ -57,6 +58,35 @@ const envSchema = z
         code: "custom",
         path: hasUrl ? ["SIGNAL_PROVIDER_API_KEY"] : ["SIGNAL_PROVIDER_API_URL"],
         message: "SIGNAL_PROVIDER_API_URL and SIGNAL_PROVIDER_API_KEY must be set together",
+      });
+    }
+
+    const rpcHost = new URL(value.TATUM_SUI_RPC_URL).hostname.toLowerCase();
+    const expectedNetwork = value.SUI_NETWORK === "sui:mainnet" ? "mainnet" : "testnet";
+    if (!rpcHost.includes(expectedNetwork)) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["TATUM_SUI_RPC_URL"],
+        message: `Tatum RPC host must contain "${expectedNetwork}" when SUI_NETWORK is ${value.SUI_NETWORK}`,
+      });
+    }
+
+    try {
+      const derived = Ed25519Keypair.fromSecretKey(
+        value.X402_CLIENT_PRIVATE_KEY,
+      ).toSuiAddress();
+      if (derived.toLowerCase() !== value.AGENT_SUI_ADDRESS.toLowerCase()) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["AGENT_SUI_ADDRESS"],
+          message: "AGENT_SUI_ADDRESS does not match the key derived from X402_CLIENT_PRIVATE_KEY",
+        });
+      }
+    } catch {
+      ctx.addIssue({
+        code: "custom",
+        path: ["X402_CLIENT_PRIVATE_KEY"],
+        message: "X402_CLIENT_PRIVATE_KEY could not be parsed as an Ed25519 key",
       });
     }
   });

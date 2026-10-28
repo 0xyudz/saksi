@@ -3,7 +3,8 @@ import { z } from "zod";
 import { SUI_DIGEST_PATTERN } from "@/lib/config";
 import { getEnv } from "@/lib/env";
 import { AppError } from "@/lib/errors";
-import { assertSameOrigin, handleRoute, jsonResponse, parseJsonBody } from "@/lib/http";
+import { assertSessionOrigin, handleRoute, jsonResponse, parseJsonBody } from "@/lib/http";
+import { assertWithinRateLimit } from "@/lib/rate-limit";
 import { optionalApiUserId } from "@/server/auth";
 import { getPaymentByDigest } from "@/server/data/payments";
 import { pickForUser } from "@/server/data/picks";
@@ -25,7 +26,8 @@ const verifySchema = z.object({
  */
 export async function POST(request: Request): Promise<Response> {
   return handleRoute(request, async ({ requestId }) => {
-    assertSameOrigin(request);
+    assertSessionOrigin(request);
+    assertWithinRateLimit(request, "payments:verify", 10, 60_000);
     const input = await parseJsonBody(request, verifySchema);
     const userId = await optionalApiUserId();
 

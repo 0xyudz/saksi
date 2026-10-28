@@ -8,6 +8,7 @@ import { AppError } from "@/lib/errors";
 import { handleRoute, jsonResponse } from "@/lib/http";
 import { toJsonObject } from "@/lib/json";
 import { parsePriceToAtomic } from "@/lib/price";
+import { assertWithinRateLimit } from "@/lib/rate-limit";
 import { authorizePayment } from "@/integrations/x402/seller";
 import { optionalApiUserId } from "@/server/auth";
 import { assertSignalPriceMatches } from "@/server/scoring/payment-binding";
@@ -39,6 +40,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
   return handleRoute(request, async ({ requestId }) => {
+    assertWithinRateLimit(request, "signals:get", 30, 60_000);
     const parsed = idSchema.safeParse((await params).id);
     if (!parsed.success) throw new AppError("VALIDATION_FAILED", "Invalid signal id.");
 

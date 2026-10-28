@@ -15,10 +15,10 @@ Built for **Total Recall — Tatum × Walrus Memory** (Track 1: Markets & Sports
 | ------------------------------------- | -------------------------------------------------------------------- |
 | `pnpm typecheck`                      | passes                                                               |
 | `pnpm lint`                           | passes                                                               |
-| `pnpm test`                           | 38 tests pass                                                        |
+| `pnpm test`                           | 57 tests pass                                                        |
 | `pnpm build`                          | passes (Next.js 16.4.3, Turbopack)                                   |
 | Live Walrus / Tatum / x402 calls      | **not verified** — no credentials or Postgres runtime were available |
-| Migrations generated                  | `db/migrations/0000_free_lifeguard.sql`                              |
+| Migrations generated                  | `0000_free_lifeguard.sql`, `0001_worried_satana.sql`                 |
 | Migrations applied to a live database | no                                                                   |
 
 The application is implemented against the official contracts, but no live integration
@@ -39,7 +39,8 @@ result is claimed below. See [Proof](#proof) and [docs/INTEGRATIONS.md](docs/INT
    it; paid-source ROI is included.
 4. **x402 premium signals on Sui** — seller paywall with Tentacle Pay facilitator, buyer
    agent using `@x402/fetch`, Tatum verification before the payload leaves the server,
-   idempotent receipts, and payment/source-ROI memories.
+   idempotent receipts bound to one signal and resource, read-only digest inspection, and
+   payment/source-ROI memories.
 5. **On-chain proof** — Tatum `sui_getTransactionBlock`, `suix_getBalance`, and
    `suix_queryEvents` power the payment ledger, balance, events and explorer links.
 6. **Dashboard** — credibility leaderboard, analyst detail with calibration, memory ledger
@@ -97,11 +98,15 @@ addresses, networks, prices or namespace prefixes are rejected at startup.
 | `SIGNAL_PROVIDER_API_URL`        | no       | optional pair with the next value                |
 | `SIGNAL_PROVIDER_API_KEY`        | no       | optional pair with the previous value            |
 | `APP_BASE_URL`                   | yes      | public base URL used by the buyer agent          |
+| `SESSION_SECRET`                 | yes      | at least 32 chars; signs the session cookie      |
 | `LOG_LEVEL`                      | no       | pino level; defaults to `info`                   |
 | `WALRUS_RECALL_LIMIT`            | no       | recall size; defaults to 10                      |
 
 `SIGNAL_PROVIDER_API_URL` and `SIGNAL_PROVIDER_API_KEY` must be set together. When both
-are absent, signal ingestion returns 503 rather than inventing provider data.
+are absent, signal ingestion returns 503 rather than inventing provider data. Startup also
+refuses a `TATUM_SUI_RPC_URL` whose host does not contain the network named by
+`SUI_NETWORK`, and an `AGENT_SUI_ADDRESS` that does not match the key derived from
+`X402_CLIENT_PRIVATE_KEY`.
 
 ### Signal provider contract
 
@@ -168,6 +173,10 @@ pnpm db:generate
 pnpm db:migrate
 ```
 
+`0001_worried_satana.sql` (payments `resource`/`requirements`) was **generated but not
+applied** in this workspace because no PostgreSQL runtime was available. Run
+`pnpm db:migrate` against a real database before starting the app.
+
 ## Routes
 
 | Route                                 | Purpose                                                                                         |
@@ -190,7 +199,7 @@ API:
 | `POST /api/recommendations`                | recall before deciding; persists citations      |
 | `GET /api/signals/[id]`                    | x402 paywall; Tatum verification before release |
 | `POST /api/payments/purchase`              | buyer agent pays and re-verifies                |
-| `POST /api/payments/verify`                | verify any digest; idempotent                   |
+| `POST /api/payments/verify`                | read-only Tatum check; reports `recorded`, never inserts |
 | `GET /api/payments`                        | ledger + Tatum balance/events                   |
 | `GET /api/health`                          | database + Walrus + Tatum checks, no secrets    |
 | `POST /api/session`, `DELETE /api/session` | local journal session                           |
@@ -223,8 +232,10 @@ pnpm test
 ```
 
 Unit tests cover only pure code: canonical JSON and SHA-256, memory build/parse/escaping,
-Brier and calibration, credibility decay, bias detection, and price conversion. Walrus,
-Tatum and x402 are deliberately not mocked; they are exercised by the scripts above.
+payment-to-signal binding and retry classification, session-cookie signing, coin type
+normalization, Brier and calibration, credibility decay, bias detection, and price
+conversion. Walrus, Tatum and x402 are deliberately not mocked; they are exercised by the
+scripts above.
 
 ## Security notes
 
@@ -235,12 +246,20 @@ Tatum and x402 are deliberately not mocked; they are exercised by the scripts ab
 - Analyst scores are `Community-attested`: they are computed from outcomes supplied by
   pick owners, not from an independent results oracle.
 - Reveal and resolve are owner-only; resolution requires a valid hash and a prior reveal.
-- Payment release requires Tatum-verified status, recipient, coin and amount.
+- Payment release requires Tatum-verified status, recipient, coin and amount. A digest is
+  bound to one signal and one x402 resource, so it cannot be replayed for a different
+  purchase. `/api/payments/verify` only reads and reports; it never creates a payment row
+  or a memory write.
 - `payments.digest` uniqueness prevents double-recording a settlement.
+- Session cookies are `<userId>.<hmac-sha256>` signed with `SESSION_SECRET`; old unsigned
+  cookies and tampered signatures are treated as no session.
 - `instrumentation.ts` validates credentials before serving traffic.
 - pino redacts authorization, cookie, `x-api-key`, private key, API key, secret and raw
   fields.
-- `POST` routes call `assertSameOrigin` before mutating state.
+- Session-bearing `POST`/`DELETE` routes require a same-origin `Origin` or an explicit
+  `x-saksi-client: agent` header. The public x402 agent route keeps the looser origin rule.
+- `/api/payments/verify` and `GET /api/signals/[id]` have an in-memory per-IP limiter
+  (10/min and 30/min). It is per-instance only and does not replace an edge limiter.
 
 ## Proof
 
@@ -275,5 +294,7 @@ Run the verification scripts after configuring credentials and replace each `PEN
   verifiable through `/api/payments/verify`.
 - The premium provider contract is intentionally minimal. A production deployment should
   add provider-specific authentication, rate limits and response-size limits.
-- Sessions are a local cookie containing the user UUID. This is a hackathon identity
-  model, not a production authentication system.
+- Sessions are a local, HMAC-signed cookie containing the user UUID. Signing prevents
+  forgery, but this is still a hackathon identity model rather than production
+  authentication (no password, expiry rotation, or revocation list).
+- The in-memory rate limiter is not shared between server instances.

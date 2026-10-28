@@ -133,12 +133,15 @@ export class TatumSuiRpc {
     method: string,
     params: ReadonlyArray<unknown>,
     schema: z.ZodType<T>,
+    options: { readonly nullMeansNotFound?: boolean } = {},
   ): Promise<RpcResult<T>> {
     let lastError: unknown;
+    let lastRetryable = false;
 
     for (let attempt = 1; attempt <= TATUM_MAX_ATTEMPTS; attempt += 1) {
       const id = this.nextId;
       this.nextId += 1;
+      lastRetryable = false;
 
       try {
         const response = await fetch(this.url, {
@@ -154,6 +157,7 @@ export class TatumSuiRpc {
 
         if (response.status === 429 || response.status >= 500) {
           lastError = new Error(`Tatum RPC responded ${response.status}`);
+          lastRetryable = response.status >= 500;
           if (attempt < TATUM_MAX_ATTEMPTS) {
             const backoff = Math.min(
               MAX_RETRY_DELAY_MS,
@@ -188,6 +192,10 @@ export class TatumSuiRpc {
           );
         }
 
+        if (options.nullMeansNotFound && envelope.result === null) {
+          throw new AppError("PAYMENT_NOT_VERIFIED", "Transaction not found.");
+        }
+
         const parsed = schema.safeParse(envelope.result);
         if (!parsed.success) {
           throw new AppError(
@@ -206,6 +214,7 @@ export class TatumSuiRpc {
       } catch (error) {
         if (error instanceof AppError) throw error;
         lastError = error;
+        lastRetryable = true;
         if (attempt < TATUM_MAX_ATTEMPTS) {
           const backoff = Math.min(
             MAX_RETRY_DELAY_MS,
@@ -223,6 +232,7 @@ export class TatumSuiRpc {
     );
     throw new AppError("UPSTREAM_UNAVAILABLE", `Tatum RPC call ${method} failed.`, {
       cause: lastError,
+      retryable: lastRetryable,
     });
   }
 
@@ -238,7 +248,9 @@ export class TatumSuiRpc {
     if (!SUI_DIGEST_PATTERN.test(digest)) {
       throw new AppError("VALIDATION_FAILED", "Invalid Sui transaction digest.");
     }
-    return this.request("sui_getTransactionBlock", [digest, options], suiTransactionBlockSchema);
+    return this.request("sui_getTransactionBlock", [digest, options], suiTransactionBlockSchema, {
+      nullMeansNotFound: true,
+    });
   }
 
   async getBalance(owner: string, coinType: string): Promise<RpcResult<SuiBalance>> {

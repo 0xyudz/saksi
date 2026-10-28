@@ -1,3 +1,4 @@
+import { normalizeCoinType } from "@/lib/coin-type";
 import { explorerTxUrl, SUI_DIGEST_PATTERN } from "@/lib/config";
 import type { JsonObject } from "@/lib/domain";
 import { getEnv, type SuiNetwork } from "@/lib/env";
@@ -60,7 +61,7 @@ export async function verifyPayment(
     );
   }
 
-  const coinType = input.coinType ?? env.SUI_USDC_COIN_TYPE;
+  const coinType = normalizeCoinType(input.coinType ?? env.SUI_USDC_COIN_TYPE);
   const { result: block, raw } = await rpc.getTransactionBlock(input.digest, {
     showEffects: true,
     showEvents: true,
@@ -89,7 +90,7 @@ export async function verifyPayment(
   for (const change of block.balanceChanges ?? []) {
     const owner = addressOfOwner(change.owner);
     if (owner?.toLowerCase() !== input.payTo.toLowerCase()) continue;
-    if (change.coinType !== coinType) continue;
+    if (normalizeCoinType(change.coinType) !== coinType) continue;
     const amount = BigInt(change.amount);
     if (amount > 0n) paid += amount;
   }

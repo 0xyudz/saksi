@@ -4,6 +4,7 @@ import { AppError } from "@/lib/errors";
 import {
   assertSettlementMatchesSignal,
   assertSignalPriceMatches,
+  isRetryablePaymentError,
   normalizeResourceUrl,
 } from "@/server/scoring/payment-binding";
 
@@ -104,5 +105,34 @@ describe("signal price binding", () => {
 
     expect(error.code).toBe("CONFLICT");
     expect(error.message).toContain("stale");
+  });
+});
+
+describe("retry classification", () => {
+  it("retries only failures the RPC marked as transport/5xx", () => {
+    expect(
+      isRetryablePaymentError(
+        new AppError("UPSTREAM_UNAVAILABLE", "Tatum RPC call failed.", { retryable: true }),
+      ),
+    ).toBe(true);
+    expect(
+      isRetryablePaymentError(
+        new AppError("PAYMENT_NOT_VERIFIED", "Timeout.", { retryable: true }),
+      ),
+    ).toBe(true);
+
+    expect(isRetryablePaymentError(new AppError("UPSTREAM_UNAVAILABLE", "Bad request."))).toBe(
+      false,
+    );
+    expect(
+      isRetryablePaymentError(
+        new AppError("PAYMENT_NOT_VERIFIED", "Transaction not found."),
+      ),
+    ).toBe(false);
+    expect(isRetryablePaymentError(new AppError("VALIDATION_FAILED", "Invalid digest."))).toBe(
+      false,
+    );
+    expect(isRetryablePaymentError(new AppError("CONFLICT", "Wrong signal."))).toBe(false);
+    expect(isRetryablePaymentError(new Error("socket hang up"))).toBe(false);
   });
 });

@@ -73,3 +73,14 @@ export function assertSignalPriceMatches(
     throw new AppError("CONFLICT", "Signal price is stale; re-ingest the signal.");
   }
 }
+
+/**
+ * Only recovery-worthy failures may be retried. Validation errors, network mismatches,
+ * insufficient payments and `Transaction not found.` are deterministic, so retrying them
+ * just delays the error. The RPC marks transport/5xx failures with `retryable`.
+ */
+export function isRetryablePaymentError(error: unknown): boolean {
+  if (!(error instanceof AppError)) return false;
+  if (!error.retryable) return false;
+  return error.code === "UPSTREAM_UNAVAILABLE" || error.code === "PAYMENT_NOT_VERIFIED";
+}

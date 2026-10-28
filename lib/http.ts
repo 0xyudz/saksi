@@ -110,3 +110,23 @@ export function assertSameOrigin(request: Request): void {
     throw new AppError("FORBIDDEN", "Cross-origin requests are not allowed.");
   }
 }
+
+/**
+ * Session-bearing routes are stricter: a browser must send Origin, while non-browser
+ * agents must identify themselves explicitly. This closes the "no Origin means trusted"
+ * gap for cookie-authenticated mutations without touching the x402 agent route.
+ */
+export function assertSessionOrigin(request: Request): void {
+  const origin = request.headers.get("origin");
+  if (origin) {
+    assertSameOrigin(request);
+    return;
+  }
+
+  if (request.headers.get("x-saksi-client") === "agent") return;
+
+  throw new AppError(
+    "FORBIDDEN",
+    "Session requests require an Origin header or x-saksi-client: agent.",
+  );
+}

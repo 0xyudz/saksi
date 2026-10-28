@@ -1,4 +1,4 @@
-import { assertSameOrigin, handleRoute, jsonResponse, parseJsonBody } from "@/lib/http";
+import { assertSessionOrigin, handleRoute, jsonResponse, parseJsonBody } from "@/lib/http";
 import { createAnalyst, createAnalystSchema } from "@/server/data/analysts";
 import { leaderboard } from "@/server/data/picks";
 import { requireApiUserId } from "@/server/auth";
@@ -25,7 +25,7 @@ export async function GET(request: Request): Promise<Response> {
 
 export async function POST(request: Request): Promise<Response> {
   return handleRoute(request, async ({ requestId }) => {
-    assertSameOrigin(request);
+    assertSessionOrigin(request);
     await requireApiUserId();
     const input = await parseJsonBody(request, createAnalystSchema);
     const analyst = await createAnalyst(input);

@@ -1,6 +1,12 @@
 import { z } from "zod";
 
-import { assertSameOrigin, handleRoute, jsonResponse, parseJsonBody, parseQuery } from "@/lib/http";
+import {
+  assertSessionOrigin,
+  handleRoute,
+  jsonResponse,
+  parseJsonBody,
+  parseQuery,
+} from "@/lib/http";
 import { optionalApiUserId, requireApiUserId } from "@/server/auth";
 import { recentPicks } from "@/server/data/picks";
 import { presentPick } from "@/server/presenters/pick";
@@ -57,7 +63,7 @@ export async function GET(request: Request): Promise<Response> {
 
 export async function POST(request: Request): Promise<Response> {
   return handleRoute(request, async ({ requestId }) => {
-    assertSameOrigin(request);
+    assertSessionOrigin(request);
     const userId = await requireApiUserId();
     const input = await parseJsonBody(request, createPickSchema);
     const created = await createPick(userId, input);

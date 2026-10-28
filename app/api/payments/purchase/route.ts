@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { assertSameOrigin, handleRoute, jsonResponse, parseJsonBody } from "@/lib/http";
+import { assertSessionOrigin, handleRoute, jsonResponse, parseJsonBody } from "@/lib/http";
 import { requireApiUserId } from "@/server/auth";
 import { pickForUser } from "@/server/data/picks";
 import { AppError } from "@/lib/errors";
@@ -15,7 +15,7 @@ const purchaseSchema = z.object({
 
 export async function POST(request: Request): Promise<Response> {
   return handleRoute(request, async ({ requestId }) => {
-    assertSameOrigin(request);
+    assertSessionOrigin(request);
     const userId = await requireApiUserId();
     const input = await parseJsonBody(request, purchaseSchema);
 

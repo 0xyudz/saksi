@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 
 import { SESSION_COOKIE } from "@/lib/config";
 import { getEnv } from "@/lib/env";
-import { assertSameOrigin, handleRoute, jsonResponse, parseJsonBody } from "@/lib/http";
+import { assertSessionOrigin, handleRoute, jsonResponse, parseJsonBody } from "@/lib/http";
 import { getSessionUser } from "@/lib/session";
 import { signSession } from "@/lib/session-cookie";
 import { createUser, createUserSchema } from "@/server/data/users";
@@ -20,7 +20,7 @@ export async function GET(request: Request): Promise<Response> {
 
 export async function POST(request: Request): Promise<Response> {
   return handleRoute(request, async ({ requestId }) => {
-    assertSameOrigin(request);
+    assertSessionOrigin(request);
     const input = await parseJsonBody(request, createUserSchema);
     const user = await createUser(input);
 
@@ -43,7 +43,7 @@ export async function POST(request: Request): Promise<Response> {
 
 export async function DELETE(request: Request): Promise<Response> {
   return handleRoute(request, async ({ requestId }) => {
-    assertSameOrigin(request);
+    assertSessionOrigin(request);
     const store = await cookies();
     store.delete(SESSION_COOKIE);
     return jsonResponse({ ok: true }, requestId);

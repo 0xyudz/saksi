@@ -11,7 +11,7 @@ import { getEnv } from "@/lib/env";
 import { AppError } from "@/lib/errors";
 import { errorForLog, getLogger } from "@/lib/logger";
 import { sourceRoi } from "@/server/data/payments";
-import { assertSettlementMatchesSignal } from "@/server/scoring/payment-binding";
+import { assertSettlementMatchesSignal, isRetryablePaymentError } from "@/server/scoring/payment-binding";
 import { getSignal } from "./ingest-signal";
 
 const VERIFY_ATTEMPTS = 4;
@@ -30,6 +30,7 @@ export async function verifyPaymentWithRetry(
       return result.payment;
     } catch (error) {
       lastError = error;
+      if (!isRetryablePaymentError(error)) throw error;
       if (attempt < VERIFY_ATTEMPTS - 1) {
         await sleep(500 * 2 ** attempt);
       }

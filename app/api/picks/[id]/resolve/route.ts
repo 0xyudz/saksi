@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { AppError } from "@/lib/errors";
-import { assertSameOrigin, handleRoute, jsonResponse, parseJsonBody } from "@/lib/http";
+import { assertSessionOrigin, handleRoute, jsonResponse, parseJsonBody } from "@/lib/http";
 import { requireApiUserId } from "@/server/auth";
 import { resolvePick, resolvePickSchema } from "@/server/usecases/resolve-pick";
 
@@ -14,7 +14,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
   return handleRoute(request, async ({ requestId }) => {
-    assertSameOrigin(request);
+    assertSessionOrigin(request);
     const userId = await requireApiUserId();
     const parsed = idSchema.safeParse((await params).id);
     if (!parsed.success) throw new AppError("VALIDATION_FAILED", "Invalid pick id.");

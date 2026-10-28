@@ -35,12 +35,15 @@ export interface AppErrorOptions {
   readonly cause?: unknown;
   readonly details?: AppErrorDetails;
   readonly httpStatus?: number;
+  /** Marks a failure that a caller may safely retry (transport/5xx only). */
+  readonly retryable?: boolean;
 }
 
 export class AppError extends Error {
   readonly code: AppErrorCode;
   readonly httpStatus: number;
   readonly details?: AppErrorDetails;
+  readonly retryable: boolean;
 
   constructor(code: AppErrorCode, message: string, options: AppErrorOptions = {}) {
     super(message, options.cause === undefined ? undefined : { cause: options.cause });
@@ -48,6 +51,7 @@ export class AppError extends Error {
     this.code = code;
     this.httpStatus = options.httpStatus ?? HTTP_STATUS[code];
     this.details = options.details;
+    this.retryable = options.retryable ?? false;
   }
 }
 
