@@ -1,11 +1,14 @@
 import { z } from "zod";
 
 import { SUI_DIGEST_PATTERN } from "@/lib/config";
+import { getEnv } from "@/lib/env";
 import { AppError } from "@/lib/errors";
 import { assertSameOrigin, handleRoute, jsonResponse, parseJsonBody } from "@/lib/http";
 import { optionalApiUserId } from "@/server/auth";
+import { getPaymentByDigest } from "@/server/data/payments";
 import { pickForUser } from "@/server/data/picks";
-import { verifyAndRecordSignalPayment } from "@/server/usecases/purchase-signal";
+import { getSignal } from "@/server/usecases/ingest-signal";
+import { verifyPaymentWithRetry } from "@/server/usecases/purchase-signal";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +18,11 @@ const verifySchema = z.object({
   pickId: z.string().uuid().optional(),
 });
 
+/**
+ * Read-only digest inspection. This endpoint verifies the transaction on-chain and
+ * reports whether Saksi already recorded it; it never inserts a payment row and never
+ * writes to Walrus Memory.
+ */
 export async function POST(request: Request): Promise<Response> {
   return handleRoute(request, async ({ requestId }) => {
     assertSameOrigin(request);
@@ -29,27 +37,27 @@ export async function POST(request: Request): Promise<Response> {
       if (!pick) throw new AppError("NOT_FOUND", "That pick does not belong to this journal.");
     }
 
-    const verified = await verifyAndRecordSignalPayment({
-      signalId: input.signalId,
+    const env = getEnv();
+    const signal = await getSignal(input.signalId);
+    const verified = await verifyPaymentWithRetry({
       digest: input.digest,
-      ...(userId === undefined ? {} : { userId }),
-      ...(input.pickId === undefined ? {} : { pickId: input.pickId }),
+      payTo: env.X402_PAY_TO_ADDRESS,
+      minAmountAtomic: signal.priceAtomic,
+      network: env.SUI_NETWORK,
     });
+    const recorded = await getPaymentByDigest(input.digest);
 
     return jsonResponse(
       {
         verified: true,
         verifiedBy: "tatum",
-        payment: {
-          id: verified.payment.id,
-          digest: verified.digest,
-          payer: verified.payer,
-          amountAtomic: verified.amountAtomic,
-          coinType: verified.coinType,
-          explorerUrl: verified.explorerUrl,
-          verifiedAt: verified.payment.verifiedAt.toISOString(),
-        },
-        memory: { blobIds: verified.memoryBlobIds },
+        digest: verified.digest,
+        payer: verified.payer,
+        amountAtomic: verified.amountAtomic.toString(),
+        coinType: verified.coinType,
+        explorerUrl: verified.explorerUrl,
+        recorded: recorded !== null,
+        signalId: recorded?.signalId ?? null,
       },
       requestId,
     );

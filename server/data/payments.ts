@@ -1,7 +1,7 @@
 import { and, eq, isNotNull } from "drizzle-orm";
 
 import { getDb } from "@/db/client";
-import { outcomes, payments, picks, signals } from "@/db/schema";
+import { outcomes, payments, picks, signals, type PaymentRow } from "@/db/schema";
 
 export interface SourceRoi {
   readonly provider: string;
@@ -60,4 +60,9 @@ export async function paymentExistsForPick(pickId: string): Promise<boolean> {
     .where(eq(payments.pickId, pickId))
     .limit(1);
   return rows.length > 0;
+}
+
+export async function getPaymentByDigest(digest: string): Promise<PaymentRow | null> {
+  const rows = await getDb().select().from(payments).where(eq(payments.digest, digest)).limit(1);
+  return rows[0] ?? null;
 }

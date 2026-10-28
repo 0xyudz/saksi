@@ -9,15 +9,12 @@ import { requestJson } from "@/lib/client-api";
 const responseSchema = z
   .object({
     verified: z.literal(true),
-    payment: z
-      .object({
-        digest: z.string(),
-        payer: z.string(),
-        amountAtomic: z.string(),
-        explorerUrl: z.string().url(),
-      })
-      .loose(),
-    memory: z.object({ blobIds: z.array(z.string()) }).loose(),
+    digest: z.string(),
+    payer: z.string(),
+    amountAtomic: z.string(),
+    explorerUrl: z.string().url(),
+    recorded: z.boolean(),
+    signalId: z.string().uuid().nullable(),
   })
   .loose();
 
@@ -42,7 +39,10 @@ export function VerifyPaymentForm() {
         schema: responseSchema,
       });
       setNotice(
-        `Tatum verified ${result.payment.amountAtomic} atomic to ${result.payment.payer}. Memory writes: ${result.memory.blobIds.length}.`,
+        `Tatum verified ${result.amountAtomic} atomic paid by ${result.payer}. ` +
+          (result.recorded
+            ? `Already recorded for signal ${result.signalId}.`
+            : "Not recorded by Saksi; this check is read-only."),
       );
       router.refresh();
     } catch (caught) {
@@ -82,7 +82,8 @@ export function VerifyPaymentForm() {
       </div>
       <p className="text-muted text-xs leading-relaxed">
         The digest is checked against Tatum&apos;s Sui RPC: successful status, configured recipient,
-        configured coin, and at least the signal price. Nothing is trusted from the client.
+        configured coin, and at least the signal price. This is read-only: no payment or memory row
+        is created here.
       </p>
       {error ? (
         <p className="border-red/30 bg-red/10 text-red rounded-xl border px-3 py-2 text-xs">

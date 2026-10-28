@@ -1,6 +1,10 @@
 import { HTTPFacilitatorClient } from "@x402/core/server";
 import type { RouteConfig } from "@x402/core/server";
-import type { PaymentFlowConfig, SchemeNetworkServer } from "@x402/core/types";
+import type {
+  PaymentFlowConfig,
+  PaymentRequirements,
+  SchemeNetworkServer,
+} from "@x402/core/types";
 import { NextAdapter, x402HTTPResourceServer, x402ResourceServer } from "@x402/next";
 import { ExactSuiScheme } from "@tentaclepay/sui-x402/exact/server";
 import type { NextRequest } from "next/server";
@@ -101,6 +105,10 @@ export type SellerAuthorization =
       readonly kind: "settled";
       readonly settlement: ProcessSettleSuccessResponse;
       readonly payment: { readonly payer?: string };
+      /** The x402 resource the buyer actually paid for. */
+      readonly resource: string;
+      /** The requirements the facilitator authorized for this settlement. */
+      readonly paymentRequirements: PaymentRequirements;
     };
 
 export async function authorizePayment(request: NextRequest): Promise<SellerAuthorization> {
@@ -143,5 +151,9 @@ export async function authorizePayment(request: NextRequest): Promise<SellerAuth
     kind: "settled",
     settlement,
     payment: settlement.payer === undefined ? {} : { payer: settlement.payer },
+    // x402 v2 carries the resource on the payment payload; fall back to the request
+    // URL because the seller route is the resource being purchased.
+    resource: processed.paymentPayload.resource?.url ?? request.url,
+    paymentRequirements: processed.paymentRequirements,
   };
 }

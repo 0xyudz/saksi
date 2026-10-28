@@ -116,6 +116,10 @@ export const payments = pgTable(
       .notNull()
       .references(() => signals.id, { onDelete: "cascade" }),
     digest: text("digest").notNull(),
+    /** The x402 resource URL that was paid for; null only for legacy rows. */
+    resource: text("resource"),
+    /** The facilitator paymentRequirements used when the settlement was authorized. */
+    requirements: jsonb("requirements").$type<JsonObject>(),
     payer: text("payer").notNull(),
     payTo: text("pay_to").notNull(),
     amountAtomic: bigint("amount_atomic", { mode: "bigint" }).notNull(),

@@ -1,7 +1,7 @@
 import { and, eq, isNull } from "drizzle-orm";
 
 import { getDb } from "@/db/client";
-import { payments, type PaymentRow } from "@/db/schema";
+import { payments, type PaymentRow, type SignalRow } from "@/db/schema";
 import { remember } from "@/integrations/walrus-memory/client";
 import { buildPaymentMemory, buildSourceRoiMemory } from "@/integrations/walrus-memory/schema";
 import { buySignal } from "@/integrations/x402/buyer";
@@ -11,6 +11,7 @@ import { getEnv } from "@/lib/env";
 import { AppError } from "@/lib/errors";
 import { errorForLog, getLogger } from "@/lib/logger";
 import { sourceRoi } from "@/server/data/payments";
+import { assertSettlementMatchesSignal } from "@/server/scoring/payment-binding";
 import { getSignal } from "./ingest-signal";
 
 const VERIFY_ATTEMPTS = 4;
@@ -19,7 +20,7 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function verifyWithRetry(
+export async function verifyPaymentWithRetry(
   input: Parameters<typeof verifyPayment>[0],
 ): Promise<VerifiedPayment> {
   let lastError: unknown;
@@ -54,6 +55,8 @@ export async function recordPayment(input: {
   signalId: string;
   userId?: string;
   pickId?: string;
+  resource?: string | null;
+  requirements?: JsonObject;
 }): Promise<RecordedPayment> {
   const db = getDb();
   const raw: JsonObject = input.verified.raw;
@@ -65,6 +68,8 @@ export async function recordPayment(input: {
       signalId: input.signalId,
       pickId: input.pickId ?? null,
       digest: input.verified.digest,
+      resource: input.resource ?? null,
+      requirements: input.requirements ?? null,
       payer: input.verified.payer,
       payTo: input.verified.payTo,
       amountAtomic: input.verified.amountAtomic,
@@ -92,6 +97,14 @@ export async function recordPayment(input: {
   if (!payment) {
     throw new AppError("INTERNAL", "A duplicate payment could not be read back.");
   }
+
+  // A digest is a receipt for exactly one purchase. Never let an old settlement be
+  // reported as a success for a different signal or resource.
+  assertSettlementMatchesSignal({
+    existingPayment: { signalId: payment.signalId, resource: payment.resource },
+    requestedSignalId: input.signalId,
+    expectedResource: input.resource ?? null,
+  });
 
   // The seller records an external settlement before the internal buyer claims it.
   // Attaching the user once lets that buyer write payment/source-ROI memories.
@@ -177,7 +190,7 @@ export async function purchaseSignal(
     throw new AppError("UPSTREAM_UNAVAILABLE", "The paid endpoint returned the wrong signal.");
   }
 
-  const verified = await verifyWithRetry({
+  const verified = await verifyPaymentWithRetry({
     digest: purchase.digest,
     payTo: env.X402_PAY_TO_ADDRESS,
     minAmountAtomic: signal.priceAtomic,
@@ -187,6 +200,7 @@ export async function purchaseSignal(
   const recorded = await recordPayment({
     verified,
     signalId,
+    resource: `${env.APP_BASE_URL.replace(/\/+$/, "")}/api/signals/${encodeURIComponent(signalId)}`,
     userId,
     ...(pickId === undefined ? {} : { pickId }),
   });
@@ -221,10 +235,14 @@ export async function verifyAndRecordSignalPayment(input: {
   digest: string;
   userId?: string;
   pickId?: string;
+  resource?: string | null;
+  requirements?: JsonObject;
+  /** Pre-loaded by the route so an unknown signal is rejected before settlement. */
+  signal?: SignalRow;
 }): Promise<VerifiedSignalPayment> {
   const env = getEnv();
-  const signal = await getSignal(input.signalId);
-  const verified = await verifyWithRetry({
+  const signal = input.signal ?? (await getSignal(input.signalId));
+  const verified = await verifyPaymentWithRetry({
     digest: input.digest,
     payTo: env.X402_PAY_TO_ADDRESS,
     minAmountAtomic: signal.priceAtomic,
@@ -236,6 +254,8 @@ export async function verifyAndRecordSignalPayment(input: {
     signalId: input.signalId,
     ...(input.userId === undefined ? {} : { userId: input.userId }),
     ...(input.pickId === undefined ? {} : { pickId: input.pickId }),
+    ...(input.resource === undefined ? {} : { resource: input.resource }),
+    ...(input.requirements === undefined ? {} : { requirements: input.requirements }),
   });
 
   const memoryBlobIds =
