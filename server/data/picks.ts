@@ -11,6 +11,7 @@ export interface AnalystSamples {
     readonly brier: number | null;
     readonly resolvedAt: Date;
     readonly sourceUrl: string;
+    readonly resolvedBy: string;
   };
 }
 
@@ -22,6 +23,7 @@ export async function loadAnalystSamples(analystId: string): Promise<AnalystSamp
       brier: outcomes.brier,
       resolvedAt: outcomes.resolvedAt,
       sourceUrl: outcomes.sourceUrl,
+      resolvedBy: outcomes.resolvedBy,
     })
     .from(picks)
     .innerJoin(outcomes, eq(outcomes.pickId, picks.id))
@@ -35,6 +37,7 @@ export async function loadAnalystSamples(analystId: string): Promise<AnalystSamp
       brier: row.brier,
       resolvedAt: row.resolvedAt,
       sourceUrl: row.sourceUrl,
+      resolvedBy: row.resolvedBy,
     },
   }));
 }
@@ -60,6 +63,8 @@ export async function getAnalyst(analystId: string): Promise<AnalystRow | null> 
 export interface LeaderboardEntry {
   readonly analyst: AnalystRow;
   readonly credibility: CredibilityBreakdown;
+  /** Resolved samples whose outcome was supplied by the pick owner, not an oracle. */
+  readonly communityAttestedSamples: number;
 }
 
 export async function leaderboard(now: Date = new Date()): Promise<LeaderboardEntry[]> {
@@ -70,15 +75,23 @@ export async function leaderboard(now: Date = new Date()): Promise<LeaderboardEn
     .leftJoin(picks, eq(picks.analystId, analysts.id))
     .leftJoin(outcomes, eq(outcomes.pickId, picks.id));
 
-  const grouped = new Map<string, { analyst: AnalystRow; samples: CredibilitySample[] }>();
+  const grouped = new Map<
+    string,
+    { analyst: AnalystRow; samples: CredibilitySample[]; communityAttestedSamples: number }
+  >();
   for (const row of rows) {
-    const entry = grouped.get(row.analyst.id) ?? { analyst: row.analyst, samples: [] };
+    const entry = grouped.get(row.analyst.id) ?? {
+      analyst: row.analyst,
+      samples: [],
+      communityAttestedSamples: 0,
+    };
     if (row.outcome) {
       entry.samples.push({
         outcome: row.outcome.result,
         brier: row.outcome.brier,
         resolvedAt: row.outcome.resolvedAt,
       });
+      if (row.outcome.resolvedBy.startsWith("user:")) entry.communityAttestedSamples += 1;
     }
     grouped.set(row.analyst.id, entry);
   }
@@ -87,6 +100,7 @@ export async function leaderboard(now: Date = new Date()): Promise<LeaderboardEn
     .map((entry) => ({
       analyst: entry.analyst,
       credibility: credibilityBreakdown(entry.samples, now),
+      communityAttestedSamples: entry.communityAttestedSamples,
     }))
     .sort((a, b) => b.credibility.score - a.credibility.score);
 }
@@ -176,6 +190,7 @@ export interface PickFeedItem {
     readonly result: "win" | "loss" | "void";
     readonly resolvedAt: Date;
     readonly sourceUrl: string;
+    readonly resolvedBy: string;
     readonly brier: number | null;
   } | null;
 }
@@ -191,6 +206,7 @@ export async function recentPicks(limit = 50, userId?: string): Promise<PickFeed
       result: outcomes.result,
       resolvedAt: outcomes.resolvedAt,
       sourceUrl: outcomes.sourceUrl,
+      resolvedBy: outcomes.resolvedBy,
       brier: outcomes.brier,
     })
     .from(picks)
@@ -208,12 +224,16 @@ export async function recentPicks(limit = 50, userId?: string): Promise<PickFeed
     analystKind: row.analystKind,
     userHandle: row.userHandle,
     outcome:
-      row.result === null || row.resolvedAt === null || row.sourceUrl === null
+      row.result === null ||
+      row.resolvedAt === null ||
+      row.sourceUrl === null ||
+      row.resolvedBy === null
         ? null
         : {
             result: row.result,
             resolvedAt: row.resolvedAt,
             sourceUrl: row.sourceUrl,
+            resolvedBy: row.resolvedBy,
             brier: row.brier,
           },
   }));

@@ -47,6 +47,11 @@ export default async function AnalystsPage() {
                         {entry.analyst.kind}
                         {entry.analyst.externalRef ? ` · ${entry.analyst.externalRef}` : ""}
                       </p>
+                      {entry.communityAttestedSamples > 0 ? (
+                        <p className="mono text-muted mt-1 text-[10px] tracking-[0.14em] uppercase">
+                          Community-attested
+                        </p>
+                      ) : null}
                     </div>
                   </div>
                   <div className="grid grid-cols-4 gap-4 text-right sm:w-[340px]">

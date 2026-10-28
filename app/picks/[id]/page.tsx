@@ -36,6 +36,7 @@ export default async function PickDetailPage({ params }: { params: Promise<{ id:
             result: detail.outcome.result,
             resolvedAt: detail.outcome.resolvedAt,
             sourceUrl: detail.outcome.sourceUrl,
+            resolvedBy: detail.outcome.resolvedBy,
             brier: detail.outcome.brier,
             payoutUnits: detail.outcome.payoutUnits,
           },
@@ -143,11 +144,16 @@ export default async function PickDetailPage({ params }: { params: Promise<{ id:
 
           {view.outcome ? (
             <section className="card p-6">
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <p className="mono text-muted text-[10px] tracking-[0.18em] uppercase">
                   Resolution
                 </p>
-                <OutcomeBadge result={view.outcome.result} />
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  {view.outcome.selfAttested ? (
+                    <span className="badge badge-neutral">Self-attested outcome</span>
+                  ) : null}
+                  <OutcomeBadge result={view.outcome.result} />
+                </div>
               </div>
               <p className="display mt-3 text-2xl">
                 {view.outcome.result === "win"
@@ -156,6 +162,12 @@ export default async function PickDetailPage({ params }: { params: Promise<{ id:
                     ? "Missed."
                     : "Voided."}
               </p>
+              {view.outcome.selfAttested ? (
+                <p className="text-muted mt-2 text-xs leading-relaxed">
+                  The pick owner supplied this result and source URL. Saksi verifies the
+                  commitment hash, not the truth of the cited source.
+                </p>
+              ) : null}
               <div className="mt-3">
                 <ProofLine label="Resolved at" value={formatDateTime(view.outcome.resolvedAt)} />
                 <ProofLine

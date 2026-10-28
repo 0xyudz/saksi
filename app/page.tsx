@@ -56,6 +56,7 @@ export default async function HomePage() {
               result: item.outcome.result,
               resolvedAt: item.outcome.resolvedAt,
               sourceUrl: item.outcome.sourceUrl,
+              resolvedBy: item.outcome.resolvedBy,
               brier: item.outcome.brier,
               payoutUnits: null,
             },

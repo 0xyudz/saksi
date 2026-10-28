@@ -42,6 +42,7 @@ export async function GET(request: Request): Promise<Response> {
                     result: item.outcome.result,
                     resolvedAt: item.outcome.resolvedAt,
                     sourceUrl: item.outcome.sourceUrl,
+                    resolvedBy: item.outcome.resolvedBy,
                     brier: item.outcome.brier,
                     payoutUnits: null,
                   },

@@ -31,6 +31,10 @@ export default async function AnalystDetailPage({ params }: { params: Promise<{ 
 
   if (!analyst) notFound();
 
+  const communityAttested = samples.filter((sample) =>
+    sample.outcome.resolvedBy.startsWith("user:"),
+  ).length;
+
   const calibration = calibrationBins(
     samples.flatMap((sample) =>
       sample.outcome.result === "void"
@@ -81,6 +85,14 @@ export default async function AnalystDetailPage({ params }: { params: Promise<{ 
             detail="95% bound on accuracy"
           />
         </div>
+
+        {communityAttested > 0 ? (
+          <p className="text-muted mt-3 text-xs leading-relaxed">
+            <span className="badge badge-neutral mr-2">Community-attested</span>
+            {communityAttested} of {samples.length} resolved samples were supplied by the pick owner,
+            with a source URL rather than an independent oracle.
+          </p>
+        ) : null}
 
         <div className="mt-8 grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
           <section className="card p-6">

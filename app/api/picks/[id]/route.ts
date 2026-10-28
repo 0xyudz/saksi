@@ -35,6 +35,7 @@ export async function GET(
               result: detail.outcome.result,
               resolvedAt: detail.outcome.resolvedAt,
               sourceUrl: detail.outcome.sourceUrl,
+              resolvedBy: detail.outcome.resolvedBy,
               brier: detail.outcome.brier,
               payoutUnits: detail.outcome.payoutUnits,
             },

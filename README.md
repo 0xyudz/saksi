@@ -1,9 +1,11 @@
 # Saksi
 
-**The prediction journal that cannot lie.** Seal a pick before the event, write the
+**Tamper-evident picks, source-cited outcomes.** Seal a pick before the event, write the
 commitment to Walrus Memory, reveal it against the original hash, resolve it with a real
-source URL, and let your own history change the next decision. Premium signals are sold
-per call through an x402 paywall on Sui and verified through Tatum before release.
+source URL, and let your own history change the next decision. The hash proves the pick
+existed before the event and was not edited; the outcome itself is self-attested by the
+pick owner and is not independently verified. Premium signals are sold per call through
+an x402 paywall on Sui and verified through Tatum before release.
 
 Built for **Total Recall — Tatum × Walrus Memory** (Track 1: Markets & Sports Prediction).
 
@@ -28,8 +30,10 @@ result is claimed below. See [Proof](#proof) and [docs/INTEGRATIONS.md](docs/INT
    event. Public views redact content until reveal; only the owner can reveal or resolve.
    The Walrus commit memory contains the market, commitment hash and timestamp only; a
    separate reveal memory writes the selection and odds after the pick is opened.
-2. **Resolution and scoring** — owner-supplied `sourceUrl` and `resolvedAt`, Brier score,
-   recency-weighted credibility, Wilson lower bound, calibration bins, and bias patterns.
+2. **Resolution and scoring** — outcomes are **self-attested**: the owner supplies
+   `sourceUrl` and `resolvedAt`, and the UI labels the result accordingly. Brier score,
+   recency-weighted credibility, Wilson lower bound, calibration bins, and bias patterns
+   are computed from those community-attested outcomes, not from an independent oracle.
 3. **Memory-driven recommendations** — Walrus Memory is recalled before a new pick. Each
    warning cites the exact blob and cosine distance from the parsed memory that produced
    it; paid-source ROI is included.
@@ -225,6 +229,11 @@ Tatum and x402 are deliberately not mocked; they are exercised by the scripts ab
 ## Security notes
 
 - Sealed pick content is redacted for every non-owner until reveal.
+- A commitment hash proves the pick existed before the event and was not edited. It does
+  **not** prove the outcome is true: outcomes are self-attested, and the UI labels them
+  `Self-attested outcome` with the owner-supplied source URL and resolved timestamp.
+- Analyst scores are `Community-attested`: they are computed from outcomes supplied by
+  pick owners, not from an independent results oracle.
 - Reveal and resolve are owner-only; resolution requires a valid hash and a prior reveal.
 - Payment release requires Tatum-verified status, recipient, coin and amount.
 - `payments.digest` uniqueness prevents double-recording a settlement.
@@ -252,6 +261,9 @@ Run the verification scripts after configuring credentials and replace each `PEN
 
 ## Known limitations and risks
 
+- Outcomes are self-attested. `sourceUrl` is validated as an http(s) URL but its content is
+  never fetched, so the hash and the calibration score do not establish that the cited
+  result is true.
 - No live PostgreSQL, Walrus, Tatum or x402 call has been made from this workspace. Live
   behavior, including facilitator compatibility and Tatum testnet JSON-RPC availability,
   remains unproven until the scripts run.

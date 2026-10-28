@@ -4,6 +4,7 @@ export interface PresentableOutcome {
   readonly result: OutcomeResult;
   readonly resolvedAt: Date;
   readonly sourceUrl: string;
+  readonly resolvedBy: string;
   readonly brier: number | null;
   readonly payoutUnits?: number | null;
 }
@@ -42,6 +43,8 @@ export interface PickView {
     readonly result: OutcomeResult;
     readonly resolvedAt: string;
     readonly sourceUrl: string;
+    readonly resolvedBy: string;
+    readonly selfAttested: boolean;
     readonly brier: number | null;
     readonly payoutUnits: number | null;
   } | null;
@@ -96,6 +99,8 @@ export function presentPick(input: {
             result: input.outcome.result,
             resolvedAt: input.outcome.resolvedAt.toISOString(),
             sourceUrl: input.outcome.sourceUrl,
+            resolvedBy: input.outcome.resolvedBy,
+            selfAttested: input.outcome.resolvedBy.startsWith("user:"),
             brier: input.outcome.brier,
             payoutUnits: input.outcome.payoutUnits ?? null,
           },
