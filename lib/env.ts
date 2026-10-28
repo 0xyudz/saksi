@@ -45,6 +45,7 @@ const envSchema = z
     SIGNAL_PROVIDER_API_KEY: nonEmpty.optional(),
 
     APP_BASE_URL: httpUrl,
+    SESSION_SECRET: z.string().min(32, "SESSION_SECRET must be at least 32 characters"),
     LOG_LEVEL: logLevelSchema.default("info"),
     WALRUS_RECALL_LIMIT: z.coerce.number().int().min(1).max(100).default(10),
   })

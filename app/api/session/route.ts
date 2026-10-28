@@ -1,8 +1,10 @@
 import { cookies } from "next/headers";
 
 import { SESSION_COOKIE } from "@/lib/config";
+import { getEnv } from "@/lib/env";
 import { assertSameOrigin, handleRoute, jsonResponse, parseJsonBody } from "@/lib/http";
 import { getSessionUser } from "@/lib/session";
+import { signSession } from "@/lib/session-cookie";
 import { createUser, createUserSchema } from "@/server/data/users";
 
 export const dynamic = "force-dynamic";
@@ -25,7 +27,7 @@ export async function POST(request: Request): Promise<Response> {
     const store = await cookies();
     store.set({
       name: SESSION_COOKIE,
-      value: user.id,
+      value: signSession(user.id, getEnv().SESSION_SECRET),
       httpOnly: true,
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",

@@ -5,7 +5,9 @@ import { redirect } from "next/navigation";
 import { getDb } from "@/db/client";
 import { users } from "@/db/schema";
 import { SESSION_COOKIE } from "./config";
+import { getEnv } from "./env";
 import { getLogger } from "./logger";
+import { verifySession } from "./session-cookie";
 
 export interface SessionUser {
   readonly id: string;
@@ -14,7 +16,15 @@ export interface SessionUser {
 
 export async function readSessionUserId(): Promise<string | undefined> {
   const store = await cookies();
-  return store.get(SESSION_COOKIE)?.value;
+  const value = store.get(SESSION_COOKIE)?.value;
+  if (!value) return undefined;
+
+  const userId = verifySession(value, getEnv().SESSION_SECRET);
+  if (!userId) {
+    getLogger().warn("session cookie signature is invalid");
+    return undefined;
+  }
+  return userId;
 }
 
 export async function getSessionUser(): Promise<SessionUser | null> {
