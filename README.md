@@ -44,7 +44,8 @@ result is claimed below. See [Proof](#proof) and [docs/INTEGRATIONS.md](docs/INT
 5. **On-chain proof** — Tatum `sui_getTransactionBlock`, `suix_getBalance`, and
    `suix_queryEvents` power the payment ledger, balance, events and explorer links.
 6. **Dashboard** — credibility leaderboard, analyst detail with calibration, memory ledger
-   counted from `listMemories()`, payment ledger and signal pages.
+   fetched from `listMemories()` (with a truncation flag, not a claimed namespace total),
+   payment ledger and signal pages.
 
 ## Quick start
 
@@ -185,7 +186,7 @@ applied** in this workspace because no PostgreSQL runtime was available. Run
 | `/onboarding`                         | create a journal identity                                                                       |
 | `/picks`, `/picks/new`, `/picks/[id]` | ledger, sealed pick form, proof detail + reveal/resolve                                         |
 | `/analysts`, `/analysts/[id]`         | leaderboard and calibration/evidence                                                            |
-| `/memory`                             | relayer health, `listMemories()` count, recall with citations                                   |
+| `/memory`                             | relayer health, fetched `listMemories()` pages, recall with paired citations                    |
 | `/signals`, `/signals/[id]`           | provider listings and paid purchase panel                                                       |
 | `/payments`                           | settlement ledger, agent balance, events, manual digest verification                            |
 

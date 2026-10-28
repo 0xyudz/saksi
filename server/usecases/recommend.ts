@@ -38,12 +38,6 @@ export interface Recommendation {
   readonly recallCount: number;
 }
 
-function citationFor(memory: ParsedMemory, citations: readonly MemoryCitation[]): MemoryCitation {
-  const match = citations.find((citation) => citation.text === memory.text);
-  if (!match) throw new AppError("INTERNAL", "Memory citation could not be resolved.");
-  return match;
-}
-
 function verdictFromCredibility(score: number, resolved: number): RecommendationVerdict {
   if (resolved < 3) return "reduce";
   if (score >= 55) return "proceed";
@@ -77,13 +71,18 @@ export async function recommend(userId: string, input: RecommendInput): Promise<
   const reasons: string[] = [];
   const used: MemoryCitation[] = [];
 
-  const analystBias = recalled.parsed.filter(
-    (memory): memory is Extract<ParsedMemory, { kind: "bias" }> =>
-      memory.kind === "bias" && memory.analyst === input.analystId,
+  const analystBias = recalled.hits.filter(
+    (
+      hit,
+    ): hit is {
+      readonly citation: MemoryCitation;
+      readonly memory: Extract<ParsedMemory, { kind: "bias" }>;
+    } =>
+      hit.memory !== null && hit.memory.kind === "bias" && hit.memory.analyst === input.analystId,
   );
 
-  for (const memory of analystBias) {
-    const citation = citationFor(memory, recalled.citations);
+  for (const hit of analystBias) {
+    const { citation, memory } = hit;
     used.push(citation);
     const appliesToUnderdog =
       input.odds < UNDERDOG_ODDS_THRESHOLD || memory.pattern.toLowerCase().includes("underdog");
@@ -97,17 +96,21 @@ export async function recommend(userId: string, input: RecommendInput): Promise<
     });
   }
 
-  const sourceMemories = recalled.parsed.filter(
-    (memory): memory is Extract<ParsedMemory, { kind: "source_roi" }> =>
-      memory.kind === "source_roi",
+  const sourceMemories = recalled.hits.filter(
+    (
+      hit,
+    ): hit is {
+      readonly citation: MemoryCitation;
+      readonly memory: Extract<ParsedMemory, { kind: "source_roi" }>;
+    } => hit.memory !== null && hit.memory.kind === "source_roi",
   );
 
   const seenProviders = new Set<string>();
-  for (const memory of sourceMemories) {
+  for (const hit of sourceMemories) {
+    const { citation, memory } = hit;
     if (seenProviders.has(memory.provider)) continue;
     seenProviders.add(memory.provider);
 
-    const citation = citationFor(memory, recalled.citations);
     const resolved = memory.correct + memory.wrong;
     const roi = resolved === 0 ? 0 : (memory.correct - memory.wrong) / resolved;
     sources.push({
@@ -131,24 +134,33 @@ export async function recommend(userId: string, input: RecommendInput): Promise<
   }
   sources.sort((a, b) => b.roi - a.roi);
 
-  const preferences = recalled.parsed.filter(
-    (memory): memory is Extract<ParsedMemory, { kind: "preference" }> =>
-      memory.kind === "preference" && memory.userId === userId,
+  const preferences = recalled.hits.filter(
+    (
+      hit,
+    ): hit is {
+      readonly citation: MemoryCitation;
+      readonly memory: Extract<ParsedMemory, { kind: "preference" }>;
+    } => hit.memory !== null && hit.memory.kind === "preference" && hit.memory.userId === userId,
   );
-  for (const preference of preferences.slice(0, 2)) {
-    const citation = citationFor(preference, recalled.citations);
+  for (const hit of preferences.slice(0, 2)) {
+    const { citation, memory } = hit;
     used.push(citation);
-    reasons.push(`Remembered preference: ${preference.statement}.`);
+    reasons.push(`Remembered preference: ${memory.statement}.`);
   }
 
-  const recalledOutcomes = recalled.parsed.filter(
-    (memory): memory is Extract<ParsedMemory, { kind: "outcome" }> => memory.kind === "outcome",
+  const recalledOutcomes = recalled.hits.filter(
+    (
+      hit,
+    ): hit is {
+      readonly citation: MemoryCitation;
+      readonly memory: Extract<ParsedMemory, { kind: "outcome" }>;
+    } => hit.memory !== null && hit.memory.kind === "outcome",
   );
   if (recalledOutcomes.length > 0) {
-    const wins = recalledOutcomes.filter((memory) => memory.result === "win").length;
-    const losses = recalledOutcomes.filter((memory) => memory.result === "loss").length;
-    const citation = citationFor(recalledOutcomes[0] as ParsedMemory, recalled.citations);
-    used.push(citation);
+    const wins = recalledOutcomes.filter((hit) => hit.memory.result === "win").length;
+    const losses = recalledOutcomes.filter((hit) => hit.memory.result === "loss").length;
+    const first = recalledOutcomes[0];
+    if (first) used.push(first.citation);
     reasons.push(
       `Recalled ${recalledOutcomes.length} outcome memories: ${wins} wins, ${losses} losses.`,
     );
@@ -227,14 +239,14 @@ export async function recommend(userId: string, input: RecommendInput): Promise<
   if (!id) throw new AppError("INTERNAL", "The recommendation could not be persisted.");
 
   getLogger().info(
-    { recommendationId: id, recalled: recalled.citations.length, cited: uniqueCitations.length },
+    { recommendationId: id, recalled: recalled.hits.length, cited: uniqueCitations.length },
     "recommendation generated from memory",
   );
 
   return {
     id,
     ...response,
-    recallCount: recalled.citations.length,
+    recallCount: recalled.hits.length,
   };
 }
 

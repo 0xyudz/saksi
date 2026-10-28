@@ -38,8 +38,12 @@ export default async function MemoryPage({
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard
             label="Relayer memories"
-            value={ledger.page.total}
-            detail="from listMemories()"
+            value={ledger.page.truncated ? `≥ ${ledger.page.fetched}` : ledger.page.fetched}
+            detail={
+              ledger.page.truncated
+                ? "listMemories() stopped at the 50-page cap"
+                : "fetched by listMemories(), not a namespace total"
+            }
             tone="amber"
           />
           <StatCard
@@ -146,7 +150,8 @@ export default async function MemoryPage({
               <h2 className="display mt-2 text-3xl">Relayer contents</h2>
             </div>
             <span className="mono text-muted text-[10px]">
-              {ledger.page.memories.length} shown · total {ledger.page.total}
+              {ledger.page.memories.length} shown
+              {ledger.page.truncated ? " · truncated at the 50-page cap" : ""}
             </span>
           </div>
 
@@ -174,10 +179,10 @@ export default async function MemoryPage({
               ))}
             </div>
           )}
-          {ledger.page.hasMore ? (
+          {ledger.page.truncated ? (
             <p className="text-muted mt-3 text-xs">
-              The relayer reports more pages than this view requested. Use the API for the full
-              cursor.
+              This list stopped after 50 pages. The count is a lower bound: the relayer reports at
+              least this many memories and may hold more.
             </p>
           ) : null}
         </section>

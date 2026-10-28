@@ -29,8 +29,18 @@ export interface MemoryPage {
     readonly size: number;
     readonly status: string;
   }>;
-  readonly total: number;
+  /** Number of memories actually fetched; not a claim about the namespace total. */
+  readonly fetched: number;
+  /** Whether the relayer had another page after the last page read. */
   readonly hasMore: boolean;
+  /** True when the 50-page safety cap stopped a namespace that still had more. */
+  readonly truncated: boolean;
+}
+
+export interface RecalledMemoryHit {
+  readonly citation: MemoryCitation;
+  /** Null when the blob text is not a valid Saksi memory record. */
+  readonly memory: ParsedMemory | null;
 }
 
 let client: MemWal | undefined;
@@ -101,7 +111,7 @@ export async function recall(
   userId: string,
   query: string,
   limit = getEnv().WALRUS_RECALL_LIMIT,
-): Promise<{ citations: MemoryCitation[]; parsed: ParsedMemory[] }> {
+): Promise<{ hits: RecalledMemoryHit[] }> {
   const result = await getMemoryClient().recall({
     query,
     limit,
@@ -109,22 +119,17 @@ export async function recall(
     sort: "relevance",
   });
 
-  const citations: MemoryCitation[] = [];
-  const parsed: ParsedMemory[] = [];
-
-  for (const hit of result.results) {
-    citations.push({
+  const hits: RecalledMemoryHit[] = result.results.map((hit) => ({
+    citation: {
       blobId: hit.blob_id,
       text: hit.text,
       distance: hit.distance,
       ...(hit.created_at === undefined ? {} : { createdAt: hit.created_at }),
-    });
+    },
+    memory: parseMemory(hit.text),
+  }));
 
-    const memory = parseMemory(hit.text);
-    if (memory) parsed.push(memory);
-  }
-
-  return { citations, parsed };
+  return { hits };
 }
 
 export async function listMemories(userId: string, pageSize = 100): Promise<MemoryPage> {
@@ -134,9 +139,15 @@ export async function listMemories(userId: string, pageSize = 100): Promise<Memo
   let cursor: string | undefined;
   let hasMore = true;
   let pages = 0;
+  let truncated = false;
   const memories: MemoryPage["memories"][number][] = [];
 
-  while (hasMore && pages < 50) {
+  while (hasMore) {
+    if (pages >= 50) {
+      truncated = true;
+      break;
+    }
+
     const page = await memwal.listMemories({ namespace, cursor, limit: pageSize });
     for (const memory of page.memories) {
       memories.push({
@@ -152,7 +163,7 @@ export async function listMemories(userId: string, pageSize = 100): Promise<Memo
     pages += 1;
   }
 
-  return { memories, total: memories.length, hasMore };
+  return { memories, fetched: memories.length, hasMore, truncated };
 }
 
 export async function assertMemoryReachable(): Promise<void> {

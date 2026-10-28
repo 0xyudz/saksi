@@ -43,22 +43,27 @@ async function main(): Promise<void> {
   });
 
   const recalled = await recall(user.id, marker);
-  const hit = recalled.citations.find((citation) => citation.text === memory.text);
+  const hit = recalled.hits.find((candidate) => candidate.citation.text === memory.text);
   if (!hit) {
     throw new Error("The freshly written memory was not returned by recall().");
   }
   output({
     step: "recall",
-    blobId: hit.blobId,
-    distance: hit.distance,
-    text: hit.text,
+    blobId: hit.citation.blobId,
+    distance: hit.citation.distance,
+    text: hit.citation.text,
   });
 
   const ledger = await listMemories(user.id);
-  output({ step: "listMemories", total: ledger.total, hasMore: ledger.hasMore });
+  output({
+    step: "listMemories",
+    fetched: ledger.fetched,
+    hasMore: ledger.hasMore,
+    truncated: ledger.truncated,
+  });
 
-  if (ledger.total < 1) {
-    throw new Error("listMemories() reported zero memories after a successful write.");
+  if (ledger.fetched < 1) {
+    throw new Error("listMemories() fetched zero memories after a successful write.");
   }
 }
 

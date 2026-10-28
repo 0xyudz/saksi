@@ -27,7 +27,7 @@ export async function recallMemories(
   query: string,
 ): Promise<readonly MemoryCitation[]> {
   const result = await recall(userId, query);
-  return result.citations;
+  return result.hits.map((hit) => hit.citation);
 }
 
 export async function savePreference(userId: string, statement: string): Promise<RememberedMemory> {
