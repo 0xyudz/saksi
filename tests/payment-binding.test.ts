@@ -64,11 +64,9 @@ describe("settlement binding", () => {
   });
 
   it("normalizes the URL deterministically", () => {
-    expect(
-      normalizeResourceUrl(
-        `https://SAKSI.example/api/signals/${SIGNAL_A}/?a=1&b=2#top`,
-      ),
-    ).toBe(`https://saksi.example/api/signals/${SIGNAL_A}`);
+    expect(normalizeResourceUrl(`https://SAKSI.example/api/signals/${SIGNAL_A}/?a=1&b=2#top`)).toBe(
+      `https://saksi.example/api/signals/${SIGNAL_A}`,
+    );
   });
 
   it("lets a legacy null resource pass when the signal id matches", () => {
@@ -125,9 +123,7 @@ describe("retry classification", () => {
       false,
     );
     expect(
-      isRetryablePaymentError(
-        new AppError("PAYMENT_NOT_VERIFIED", "Transaction not found."),
-      ),
+      isRetryablePaymentError(new AppError("PAYMENT_NOT_VERIFIED", "Transaction not found.")),
     ).toBe(false);
     expect(isRetryablePaymentError(new AppError("VALIDATION_FAILED", "Invalid digest."))).toBe(
       false,

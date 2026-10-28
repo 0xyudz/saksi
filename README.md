@@ -192,18 +192,18 @@ applied** in this workspace because no PostgreSQL runtime was available. Run
 
 API:
 
-| Route                                      | Notes                                           |
-| ------------------------------------------ | ----------------------------------------------- |
-| `POST /api/picks`                          | seal a pick; rolls back on memory failure       |
-| `POST /api/picks/[id]/reveal`              | owner only; hash + time-lock checked            |
-| `POST /api/picks/[id]/resolve`             | owner only; source URL + timestamp required     |
-| `POST /api/recommendations`                | recall before deciding; persists citations      |
-| `GET /api/signals/[id]`                    | x402 paywall; Tatum verification before release |
-| `POST /api/payments/purchase`              | buyer agent pays and re-verifies                |
+| Route                                      | Notes                                                    |
+| ------------------------------------------ | -------------------------------------------------------- |
+| `POST /api/picks`                          | seal a pick; rolls back on memory failure                |
+| `POST /api/picks/[id]/reveal`              | owner only; hash + time-lock checked                     |
+| `POST /api/picks/[id]/resolve`             | owner only; source URL + timestamp required              |
+| `POST /api/recommendations`                | recall before deciding; persists citations               |
+| `GET /api/signals/[id]`                    | x402 paywall; Tatum verification before release          |
+| `POST /api/payments/purchase`              | buyer agent pays and re-verifies                         |
 | `POST /api/payments/verify`                | read-only Tatum check; reports `recorded`, never inserts |
-| `GET /api/payments`                        | ledger + Tatum balance/events                   |
-| `GET /api/health`                          | database + Walrus + Tatum checks, no secrets    |
-| `POST /api/session`, `DELETE /api/session` | local journal session                           |
+| `GET /api/payments`                        | ledger + Tatum balance/events                            |
+| `GET /api/health`                          | database + Walrus + Tatum checks, no secrets             |
+| `POST /api/session`, `DELETE /api/session` | local journal session                                    |
 
 ## Verification scripts
 

@@ -39,7 +39,8 @@ export function normalizeResourceUrl(value: string): string {
  * Rejects a digest that is already recorded for a different signal or resource.
  * Legacy rows with `resource === null` remain valid while the signal id matches.
  */
-export function assertSettlementMatchesSignal(input: SettlementBindingInput): void {  const { existingPayment, requestedSignalId, expectedResource } = input;
+export function assertSettlementMatchesSignal(input: SettlementBindingInput): void {
+  const { existingPayment, requestedSignalId, expectedResource } = input;
 
   if (existingPayment.signalId !== requestedSignalId) {
     throw new AppError(

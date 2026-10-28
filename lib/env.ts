@@ -72,9 +72,7 @@ const envSchema = z
     }
 
     try {
-      const derived = Ed25519Keypair.fromSecretKey(
-        value.X402_CLIENT_PRIVATE_KEY,
-      ).toSuiAddress();
+      const derived = Ed25519Keypair.fromSecretKey(value.X402_CLIENT_PRIVATE_KEY).toSuiAddress();
       if (derived.toLowerCase() !== value.AGENT_SUI_ADDRESS.toLowerCase()) {
         ctx.addIssue({
           code: "custom",

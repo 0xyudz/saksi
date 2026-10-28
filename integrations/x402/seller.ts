@@ -1,10 +1,6 @@
 import { HTTPFacilitatorClient } from "@x402/core/server";
 import type { RouteConfig } from "@x402/core/server";
-import type {
-  PaymentFlowConfig,
-  PaymentRequirements,
-  SchemeNetworkServer,
-} from "@x402/core/types";
+import type { PaymentFlowConfig, PaymentRequirements, SchemeNetworkServer } from "@x402/core/types";
 import { NextAdapter, x402HTTPResourceServer, x402ResourceServer } from "@x402/next";
 import { ExactSuiScheme } from "@tentaclepay/sui-x402/exact/server";
 import type { NextRequest } from "next/server";

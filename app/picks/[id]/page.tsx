@@ -164,8 +164,8 @@ export default async function PickDetailPage({ params }: { params: Promise<{ id:
               </p>
               {view.outcome.selfAttested ? (
                 <p className="text-muted mt-2 text-xs leading-relaxed">
-                  The pick owner supplied this result and source URL. Saksi verifies the
-                  commitment hash, not the truth of the cited source.
+                  The pick owner supplied this result and source URL. Saksi verifies the commitment
+                  hash, not the truth of the cited source.
                 </p>
               ) : null}
               <div className="mt-3">

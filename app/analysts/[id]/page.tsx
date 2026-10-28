@@ -89,8 +89,8 @@ export default async function AnalystDetailPage({ params }: { params: Promise<{ 
         {communityAttested > 0 ? (
           <p className="text-muted mt-3 text-xs leading-relaxed">
             <span className="badge badge-neutral mr-2">Community-attested</span>
-            {communityAttested} of {samples.length} resolved samples were supplied by the pick owner,
-            with a source URL rather than an independent oracle.
+            {communityAttested} of {samples.length} resolved samples were supplied by the pick
+            owner, with a source URL rather than an independent oracle.
           </p>
         ) : null}
 

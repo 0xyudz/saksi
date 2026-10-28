@@ -11,7 +11,10 @@ import { getEnv } from "@/lib/env";
 import { AppError } from "@/lib/errors";
 import { errorForLog, getLogger } from "@/lib/logger";
 import { sourceRoi } from "@/server/data/payments";
-import { assertSettlementMatchesSignal, isRetryablePaymentError } from "@/server/scoring/payment-binding";
+import {
+  assertSettlementMatchesSignal,
+  isRetryablePaymentError,
+} from "@/server/scoring/payment-binding";
 import { getSignal } from "./ingest-signal";
 
 const VERIFY_ATTEMPTS = 4;
