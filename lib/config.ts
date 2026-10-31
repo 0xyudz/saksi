@@ -28,7 +28,7 @@ export const UNDERDOG_ODDS_THRESHOLD = 2.5;
 /** Minimum sample before a bias warning is emitted to the recommender. */
 export const BIAS_MIN_EVIDENCE = 2;
 
-/** Sui JSON-RPC transaction digests are base58-encoded 32-byte hashes. */
+/** Sui transaction digests are base58-encoded 32-byte hashes. */
 export const SUI_DIGEST_PATTERN = /^[1-9A-HJ-NP-Za-km-z]{43,44}$/;
 
 export const TATUM_REQUEST_TIMEOUT_MS = 15_000;

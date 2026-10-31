@@ -15,7 +15,7 @@ backed by a source or by code in this repository, it is listed under **Unverifie
 | Walrus Memory configuration     | https://docs.wal.app/walrus-memory/reference/configuration     |
 | Walrus Memory relayer API       | https://docs.wal.app/walrus-memory/relayer/api-reference       |
 | MemWal source                   | https://github.com/MystenLabs/MemWal                           |
-| Tatum Sui JSON-RPC              | https://docs.tatum.io/reference/rpc-sui                        |
+| Tatum Sui GraphQL               | https://docs.tatum.io/reference/rpc-sui                        |
 | Tatum RPC gateway setup         | https://docs.tatum.io/reference/how-to-connect-rpc-gateway     |
 | Tentacle Pay x402 seller        | https://docs.tentaclepay.com/x402/quickstart-for-sellers       |
 | Tentacle Pay x402 agent         | https://docs.tentaclepay.com/x402/quickstart-for-agents        |
@@ -88,28 +88,37 @@ memory write does not invalidate the on-chain payment, and the error is logged.
 The `memory_writes` table is an operator audit trail. It is not used as a substitute for
 `listMemories()` on `/memory`.
 
-## Tatum Sui RPC
+## Tatum Sui GraphQL
 
-`integrations/tatum/rpc.ts` is a typed JSON-RPC client:
+Tatum's Sui gateway no longer serves JSON-RPC (`sui_getTransactionBlock`,
+`suix_getBalance`, `suix_queryEvents` now return 404). The official interfaces are
+GraphQL (`/graphql`) and gRPC. Saksi uses GraphQL.
 
-- `POST TATUM_SUI_RPC_URL`
+`integrations/tatum/client.ts` is a typed GraphQL client:
+
+- `POST TATUM_SUI_RPC_URL` (must be the `/graphql` path)
 - header `x-api-key: TATUM_API_KEY`
-- body `{ jsonrpc: "2.0", id, method, params }`
-- zod validates the envelope and every result type
+- body `{ query, variables }`
+- zod validates every payload before it reaches product code
 - timeout per attempt: 15s
 - retry with jittered exponential backoff on HTTP 429/5xx and network failures (3 attempts)
-- no retry for JSON-RPC semantic errors or schema mismatches
-- incrementing request ids
+- no retry for GraphQL semantic errors or schema mismatches
+- module-level slot allocator keeps traffic at ~2.8 requests/second, because the Tatum
+  free tier rejects more than three requests per second
 
-Methods used:
+Queries used:
 
-| Method                                  | Consumer                                        |
-| --------------------------------------- | ----------------------------------------------- |
-| `sui_getLatestCheckpointSequenceNumber` | `/api/health`, `verify-tatum.ts`                |
-| `sui_getTransactionBlock`               | payment verification, `verify-tatum.ts`         |
-| `suix_getBalance`                       | agent USDC balance on `/payments`               |
-| `suix_queryEvents`                      | settlement event feed on `/payments`            |
-| `sui_getObject`                         | available in the client for object-level checks |
+| GraphQL selection                                                   | Consumer                                |
+| ------------------------------------------------------------------- | --------------------------------------- |
+| `checkpoint { sequenceNumber }`                                     | `/api/health`, `verify-tatum.ts`        |
+| `transaction(digest) { effects { ... } }`                           | payment verification, `verify-tatum.ts` |
+| `address(address) { balance(coinType) { totalBalance } }`           | agent USDC balance on `/payments`       |
+| `transaction(digest) { effects { events { nodes { contents } } } }` | settlement event feed on `/payments`    |
+
+GraphQL caps a connection page at 50 nodes. Payment verification follows
+`balanceChanges.pageInfo.hasNextPage` for up to ten pages so a batched transaction
+cannot hide a larger transfer. GraphQL does not expose `coinObjectCount`, so the UI
+reports the total balance only rather than inventing a count.
 
 ### Payment verification algorithm
 
@@ -118,9 +127,9 @@ facilitator receipt:
 
 1. Validate the digest shape.
 2. Reject a network that differs from `SUI_NETWORK`.
-3. Fetch `sui_getTransactionBlock` with effects, events, balance changes and input.
+3. Fetch the transaction with effects, events and balance changes.
 4. Require the returned digest to equal the requested digest.
-5. Require `effects.status.status === "success"`.
+5. Require the mapped effects status to be `success` (GraphQL `SUCCESS`).
 6. Read the sender as `payer`.
 7. Sum positive balance changes whose owner is `X402_PAY_TO_ADDRESS` and whose
    `coinType` is `SUI_USDC_COIN_TYPE`.
@@ -130,13 +139,12 @@ facilitator receipt:
 If Tatum is unreachable the product refuses the signal. There is no cached or fabricated
 success path.
 
-### Testnet caveat
+### Network caveat
 
-Tatum's Sui page currently lists JSON-RPC for Sui mainnet and only gRPC for Sui testnet.
-Saksi requires a JSON-RPC endpoint because it calls `sui_getTransactionBlock` and
-`suix_queryEvents`. If `SUI_NETWORK=sui:testnet`, `TATUM_SUI_RPC_URL` must point to a
-Tatum JSON-RPC endpoint that actually serves those methods. Do not silently switch
-networks when it does not.
+Both Tatum interfaces are mainnet-only for Sui: `sui-mainnet-graphql` and
+`sui-mainnet-grpc`. Public Sui JSON-RPC endpoints are deprecated as well. The app
+therefore runs on `sui:mainnet`; a testnet deployment would need a gRPC client, which
+this repository does not implement. Do not silently switch networks.
 
 ## x402 on Sui (Tentacle Pay facilitator)
 

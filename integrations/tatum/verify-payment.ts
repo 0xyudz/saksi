@@ -4,7 +4,7 @@ import type { JsonObject } from "@/lib/domain";
 import { getEnv, type SuiNetwork } from "@/lib/env";
 import { AppError } from "@/lib/errors";
 import { nowIso } from "@/lib/time";
-import { TatumSuiRpc, type SuiTransactionBlock } from "./rpc";
+import { TatumSuiClient, type SuiTransactionBlock } from "./client";
 
 export interface VerifyPaymentInput {
   readonly digest: string;
@@ -47,7 +47,7 @@ function addressOfOwner(owner: unknown): string | null {
  */
 export async function verifyPayment(
   input: VerifyPaymentInput,
-  rpc: TatumSuiRpc = TatumSuiRpc.fromEnv(),
+  rpc: TatumSuiClient = TatumSuiClient.fromEnv(),
 ): Promise<PaymentVerification> {
   const env = getEnv();
 
@@ -62,12 +62,7 @@ export async function verifyPayment(
   }
 
   const coinType = normalizeCoinType(input.coinType ?? env.SUI_USDC_COIN_TYPE);
-  const { result: block, raw } = await rpc.getTransactionBlock(input.digest, {
-    showEffects: true,
-    showEvents: true,
-    showBalanceChanges: true,
-    showInput: true,
-  });
+  const { result: block, raw } = await rpc.getTransactionBlock(input.digest);
 
   if (block.digest !== input.digest) {
     throw new AppError("PAYMENT_NOT_VERIFIED", "Tatum returned a different transaction digest.");

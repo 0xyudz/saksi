@@ -1,6 +1,6 @@
 import "./load-env";
 
-import { TatumSuiRpc } from "@/integrations/tatum/rpc";
+import { TatumSuiClient } from "@/integrations/tatum/client";
 import { getEnv } from "@/lib/env";
 import { getLogger } from "@/lib/logger";
 
@@ -16,16 +16,11 @@ async function main(): Promise<void> {
     );
   }
 
-  const rpc = TatumSuiRpc.fromEnv();
-  const checkpoint = await rpc.getLatestCheckpoint();
+  const client = TatumSuiClient.fromEnv();
+  const checkpoint = await client.getLatestCheckpoint();
   output({ step: "checkpoint", network: env.SUI_NETWORK, checkpoint });
 
-  const transaction = await rpc.getTransactionBlock(env.TATUM_VERIFY_DIGEST, {
-    showEffects: true,
-    showEvents: true,
-    showBalanceChanges: true,
-    showInput: true,
-  });
+  const transaction = await client.getTransactionBlock(env.TATUM_VERIFY_DIGEST);
 
   const status = transaction.result.effects?.status.status;
   if (status !== "success") {
@@ -40,15 +35,15 @@ async function main(): Promise<void> {
     status,
     sender: sender ?? "unavailable",
     events: eventCount,
+    balanceChanges: transaction.result.balanceChanges?.length ?? 0,
   });
 
-  const balance = await rpc.getBalance(env.AGENT_SUI_ADDRESS, env.SUI_USDC_COIN_TYPE);
+  const balance = await client.getBalance(env.AGENT_SUI_ADDRESS, env.SUI_USDC_COIN_TYPE);
   output({
     step: "balance",
     owner: env.AGENT_SUI_ADDRESS,
     coinType: balance.result.coinType,
     totalBalance: balance.result.totalBalance,
-    coinObjectCount: balance.result.coinObjectCount,
   });
 
   getLogger().info({ digest: transaction.result.digest }, "tatum verification completed");

@@ -94,7 +94,7 @@ export default async function HomePage() {
             <div className="mt-8 flex flex-wrap gap-2">
               <span className="badge badge-neutral">sha256 commitments</span>
               <span className="badge badge-neutral">Walrus Memory recall</span>
-              <span className="badge badge-neutral">Tatum Sui RPC</span>
+              <span className="badge badge-neutral">Tatum Sui GraphQL</span>
               <span className="badge badge-neutral">x402 on Sui</span>
             </div>
           </div>
@@ -200,7 +200,7 @@ export default async function HomePage() {
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <p className="mono text-amber text-[10px] tracking-[0.18em] uppercase">
-                suix_queryEvents · Tatum
+                Tatum GraphQL · transaction events
               </p>
               <h2 className="display mt-2 text-2xl">Live settlement feed</h2>
             </div>

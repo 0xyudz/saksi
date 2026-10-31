@@ -1,6 +1,4 @@
-import { z } from "zod";
-
-import { TatumSuiRpc } from "@/integrations/tatum/rpc";
+import { TatumSuiClient } from "@/integrations/tatum/client";
 import { getEnv } from "@/lib/env";
 import { AppError } from "@/lib/errors";
 import { toJsonObject } from "@/lib/json";
@@ -10,7 +8,6 @@ export interface AgentBalance {
   readonly owner: string;
   readonly coinType: string;
   readonly totalBalance: string;
-  readonly coinObjectCount: number;
 }
 
 export interface ChainHealth {
@@ -26,13 +23,13 @@ export interface OnChainEvent {
 
 export async function chainHealth(): Promise<ChainHealth> {
   const env = getEnv();
-  const checkpoint = await TatumSuiRpc.fromEnv().getLatestCheckpoint();
+  const checkpoint = await TatumSuiClient.fromEnv().getLatestCheckpoint();
   return { checkpoint, network: env.SUI_NETWORK };
 }
 
 export async function agentBalance(): Promise<AgentBalance> {
   const env = getEnv();
-  const { result } = await TatumSuiRpc.fromEnv().getBalance(
+  const { result } = await TatumSuiClient.fromEnv().getBalance(
     env.AGENT_SUI_ADDRESS,
     env.SUI_USDC_COIN_TYPE,
   );
@@ -40,38 +37,27 @@ export async function agentBalance(): Promise<AgentBalance> {
     owner: env.AGENT_SUI_ADDRESS,
     coinType: result.coinType,
     totalBalance: result.totalBalance,
-    coinObjectCount: result.coinObjectCount,
   };
 }
 
 /**
- * The dashboard feed uses `suix_queryEvents` against the transactions Saksi already
- * verified. A settlement may legitimately emit no events, so an empty list is a fact,
- * not a fallback.
+ * The dashboard feed reads the events of the transactions Saksi already verified. A
+ * settlement may legitimately emit no events, so an empty list is a fact, not a
+ * fallback.
  */
 export async function eventsForDigests(digests: readonly string[]): Promise<OnChainEvent[]> {
   const targets = digests.slice(0, 10);
   if (targets.length === 0) return [];
 
-  const rpc = TatumSuiRpc.fromEnv();
+  const client = TatumSuiClient.fromEnv();
   const settled = await Promise.allSettled(
     targets.map(async (digest) => {
-      const page = await rpc.queryEvents({
-        query: { Transaction: digest },
-        limit: 20,
-        descending: true,
-      });
-      return page.result.data.map((event) => {
-        const record = z
-          .object({ type: z.string().optional(), parsedJson: z.unknown().optional() })
-          .loose()
-          .parse(event);
-        return {
-          digest,
-          type: record.type ?? "unknown",
-          payload: toJsonObject(record.parsedJson ?? {}),
-        };
-      });
+      const { result } = await client.getTransactionBlock(digest);
+      return (result.events ?? []).map((event) => ({
+        digest,
+        type: event.type,
+        payload: toJsonObject(event.parsedJson),
+      }));
     }),
   );
 

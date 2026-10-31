@@ -41,8 +41,8 @@ result is claimed below. See [Proof](#proof) and [docs/INTEGRATIONS.md](docs/INT
    agent using `@x402/fetch`, Tatum verification before the payload leaves the server,
    idempotent receipts bound to one signal and resource, read-only digest inspection, and
    payment/source-ROI memories.
-5. **On-chain proof** — Tatum `sui_getTransactionBlock`, `suix_getBalance`, and
-   `suix_queryEvents` power the payment ledger, balance, events and explorer links.
+5. **On-chain proof** — Tatum GraphQL `checkpoint`, `transaction` and `address.balance`
+   queries power the payment ledger, balance, events and explorer links.
 6. **Dashboard** — credibility leaderboard, analyst detail with calibration, memory ledger
    fetched from `listMemories()` (with a truncation flag, not a claimed namespace total),
    payment ledger and signal pages.
@@ -55,7 +55,7 @@ Requirements:
 - pnpm 10.33.0
 - PostgreSQL with `gen_random_uuid()` (Postgres 13+)
 - Walrus Memory account and delegate key
-- Tatum API key and a Sui JSON-RPC endpoint for the selected network
+- Tatum API key and the Sui mainnet GraphQL gateway
 - Tentacle Pay facilitator access and a Sui payee address
 - A buyer wallet funded for the selected network
 - Optionally, a premium signal provider implementing the contract below
@@ -86,7 +86,7 @@ addresses, networks, prices or namespace prefixes are rejected at startup.
 | `WALRUS_MEMORY_RELAYER_URL`      | yes      | Walrus Memory relayer base URL                   |
 | `WALRUS_MEMORY_NAMESPACE_PREFIX` | yes      | lowercase namespace prefix; user id is appended  |
 | `TATUM_API_KEY`                  | yes      | sent as `x-api-key` to Tatum                     |
-| `TATUM_SUI_RPC_URL`              | yes      | Tatum Sui JSON-RPC gateway                       |
+| `TATUM_SUI_RPC_URL`              | yes      | Tatum Sui GraphQL endpoint (`/graphql`)          |
 | `SUI_NETWORK`                    | yes      | `sui:mainnet` or `sui:testnet`                   |
 | `SUI_USDC_COIN_TYPE`             | yes      | coin type used for balances and verification     |
 | `AGENT_SUI_ADDRESS`              | yes      | agent wallet shown on `/payments`                |
@@ -284,9 +284,9 @@ Run the verification scripts after configuring credentials and replace each `PEN
 - Outcomes are self-attested. `sourceUrl` is validated as an http(s) URL but its content is
   never fetched, so the hash and the calibration score do not establish that the cited
   result is true.
-- No live PostgreSQL, Walrus, Tatum or x402 call has been made from this workspace. Live
-  behavior, including facilitator compatibility and Tatum testnet JSON-RPC availability,
-  remains unproven until the scripts run.
+- Tatum serves Sui over GraphQL (`/graphql`) and gRPC only; JSON-RPC is deprecated. This
+  client targets the mainnet GraphQL gateway, so a testnet deployment would need a gRPC
+  client that this repository does not implement.
 - Tentacle Pay's Sui seller guide recommends Node.js 24+; this project requires 22.23.4+
   and was built/tested on 24.18.0.
 - The x402 settlement happens before Tatum verification. If Tatum is unavailable after a

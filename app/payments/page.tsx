@@ -66,7 +66,7 @@ export default async function PaymentsPage() {
             }
             detail={
               balance.status === "fulfilled"
-                ? `${balance.value.coinObjectCount} coin objects · Tatum`
+                ? "Tatum GraphQL balance"
                 : "Tatum balance query failed"
             }
           />
@@ -163,7 +163,6 @@ export default async function PaymentsPage() {
                     label="Balance"
                     value={formatUsd(BigInt(balance.value.totalBalance))}
                   />
-                  <ProofLine label="Coin objects" value={String(balance.value.coinObjectCount)} />
                 </div>
               ) : (
                 <p className="text-red mt-3 text-xs leading-relaxed">
@@ -191,7 +190,7 @@ export default async function PaymentsPage() {
           <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
             <div>
               <p className="mono text-muted text-[10px] tracking-[0.18em] uppercase">
-                suix_queryEvents
+                GraphQL transaction.effects.events
               </p>
               <h2 className="display mt-2 text-3xl">Settlement events</h2>
             </div>
