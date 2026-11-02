@@ -11,18 +11,23 @@ Built for **Total Recall — Tatum × Walrus Memory** (Track 1: Markets & Sports
 
 ## Status
 
-| Check                                 | Result                                                               |
-| ------------------------------------- | -------------------------------------------------------------------- |
-| `pnpm typecheck`                      | passes                                                               |
-| `pnpm lint`                           | passes                                                               |
-| `pnpm test`                           | 57 tests pass                                                        |
-| `pnpm build`                          | passes (Next.js 16.4.3, Turbopack)                                   |
-| Live Walrus / Tatum / x402 calls      | **not verified** — no credentials or Postgres runtime were available |
-| Migrations generated                  | `0000_free_lifeguard.sql`, `0001_worried_satana.sql`                 |
-| Migrations applied to a live database | no                                                                   |
+| Check                                 | Result                                                                    |
+| ------------------------------------- | ------------------------------------------------------------------------- |
+| `pnpm typecheck`                      | passes                                                                    |
+| `pnpm lint`                           | passes                                                                    |
+| `pnpm test`                           | 62 tests pass across 10 files                                             |
+| `pnpm build`                          | passes (Next.js 16.4.3, Turbopack)                                        |
+| Migrations generated                  | `0000_free_lifeguard.sql`, `0001_worried_satana.sql`                      |
+| Migrations applied to a live database | yes — 8 tables on a live Postgres instance                                |
+| Walrus Memory (mainnet relayer)       | verified — `pnpm verify:memory` writes, recalls and lists real blobs      |
+| Tatum GraphQL (`sui:mainnet`)         | verified — `pnpm verify:tatum` reads checkpoint, transaction and balance  |
+| x402 on Sui mainnet                   | verified — one real $0.01 USDC settlement, verified by Tatum and recorded |
+| Deployed instance                     | no — the app runs locally at `http://localhost:3000`                      |
 
-The application is implemented against the official contracts, but no live integration
-result is claimed below. See [Proof](#proof) and [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md).
+Every value in [Proof](#proof) was produced by the command named beside it against Sui
+mainnet on 2 Nov 2026, and nothing there is estimated. The settlement in that table came
+from a self-custody browser wallet signing its own payment, not from an operator key. See
+also [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md).
 
 ## What is implemented
 
@@ -263,20 +268,44 @@ scripts above.
 
 ## Proof
 
-The following fields are **pending**. They must be filled from real output, never invented.
-Run the verification scripts after configuring credentials and replace each `PENDING`.
+Every value below is copied from real command output against Sui mainnet on 2 Nov 2026.
+No value is estimated, and anything not yet captured is marked `not captured` rather than
+guessed.
 
-| Proof                               | Value                                                 |
-| ----------------------------------- | ----------------------------------------------------- |
-| Walrus Memory blob ID (sealed pick) | `PENDING — run pnpm verify:memory`                    |
-| Walrus Memory recall distance       | `PENDING — run pnpm verify:memory`                    |
-| Walrus Memory relayer count         | `PENDING — run pnpm verify:memory`                    |
-| Tatum checkpoint                    | `PENDING — run pnpm verify:tatum`                     |
-| Tatum transaction digest            | `PENDING — run pnpm verify:tatum`                     |
-| x402 settlement digest              | `PENDING — run pnpm verify:x402`                      |
-| Agent USDC balance                  | `PENDING — run pnpm verify:tatum` or open `/payments` |
-| Dashboard screenshot                | `PENDING — no live environment`                       |
-| 10 mainnet memories                 | `PENDING — requires real usage`                       |
+| Proof                               | Value                                                                                               | Produced by            |
+| ----------------------------------- | --------------------------------------------------------------------------------------------------- | ---------------------- |
+| Walrus Memory relayer               | `status: ok`, relayer `0.1.0`                                                                       | `pnpm verify:memory`   |
+| Walrus Memory blob ID (fresh write) | `Y-TFsuMq1956BWInd8F26H62S1ohTI8hxT723DMjckE`                                                       | `pnpm verify:memory`   |
+| Walrus Memory recall distance       | `0.35874120150280087` (cosine)                                                                      | `pnpm verify:memory`   |
+| Walrus Memory blob ID (sealed pick) | `RruPtIKgN3QZyEmUNOIVqA_yrk8mBylE8Bsg4h9O0NA` (`pick_commit`)                                       | `memory_writes`        |
+| Walrus Memory blob ID (payment)     | `iQkdVACTG5arG58RDCnYr74_dJPeueaeJ9NTGheeBRA` (`payment`)                                           | `memory_writes`        |
+| Walrus Memory blob ID (source ROI)  | `KkHx_aFl4YkIBBGF3bQ4hMMljtdhshUUTVMxhEqbjcE` (`source_roi`)                                        | `memory_writes`        |
+| Mainnet memories written            | 11 rows: `pick_commit` 2, `pick_reveal` 2, `outcome` 2, `preference` 3, `payment` 1, `source_roi` 1 | `memory_writes`        |
+| Tatum checkpoint                    | `340802699`                                                                                         | `pnpm verify:tatum`    |
+| Tatum transaction digest            | `DemaKkYM7Ni4mRJcxbth3e4h3BkkqgKnR1MYPdWhmgjq` — status `success`, 2 balance changes                | `pnpm verify:tatum`    |
+| x402 settlement digest              | `DemaKkYM7Ni4mRJcxbth3e4h3BkkqgKnR1MYPdWhmgjq` — 10000 atomic USDC, `sui:mainnet`                   | browser wallet + Tatum |
+| x402 payer                          | `0xe47cc1da1a36461dbfbc2431b36b8579403d105d8d2a6fe05c442071905d8900`                                | `payments`             |
+| x402 merchant                       | `0x5fb8e783752ba7ec09ee4c7c7a91bb51a4a643cd8a7473643a95c1a56b7e6432`                                | `.env.local` payee     |
+| Merchant USDC balance after settle  | `10000` atomic ($0.01)                                                                              | Tatum GraphQL          |
+| Agent (operator) USDC balance       | `0` — the operator key never paid; the buyer did                                                    | `pnpm verify:tatum`    |
+| Explorer link                       | <https://suivision.xyz/txblock/DemaKkYM7Ni4mRJcxbth3e4h3BkkqgKnR1MYPdWhmgjq>                        | chain                  |
+| Dashboard screenshot                | not captured                                                                                        | —                      |
+
+Reproduce the two script-backed rows with:
+
+```bash
+pnpm verify:memory   # relayer status, blob ID, recall distance, listMemories count
+pnpm verify:tatum    # checkpoint, transaction status, balance changes, agent balance
+```
+
+The x402 row is a browser-driven purchase: the buyer connected their own Sui wallet,
+signed the settlement themselves, and the seller released the payload only after Tatum
+confirmed the digest. `payments.digest` is unique, so re-running the recorder on that
+digest returns the existing row instead of charging twice.
+
+The signal behind that settlement is served by `scripts/demo-signal-provider.ts` and is
+labelled **synthetic demo payload** everywhere it appears. It exists to exercise the
+paywall, not to claim a real forecast was sold.
 
 ## Known limitations and risks
 
@@ -288,10 +317,13 @@ Run the verification scripts after configuring credentials and replace each `PEN
   client that this repository does not implement.
 - Tentacle Pay's Sui seller guide recommends Node.js 24+; this project requires 22.23.4+
   and was built/tested on 24.18.0.
-- The x402 settlement happens before Tatum verification. If Tatum is unavailable after a
-  successful settlement, the buyer has paid but does not receive the payload until a
-  retry succeeds. This is an intentional fail-closed trade-off; the digest remains
-  verifiable through `/api/payments/verify`.
+- The x402 settlement happens before Tatum verification. If Tatum stays unavailable after a
+  successful settlement, the buyer has paid but does not receive the payload until a retry
+  succeeds. This is an intentional fail-closed trade-off; the digest remains verifiable
+  through `/api/payments/verify`. A freshly settled digest is not indexed by Tatum
+  immediately, so the seller retries for roughly 20 s (7 attempts, 750 ms base delay, 5 s
+  ceiling) before giving up; treating that lag as permanent previously returned 402 to a
+  buyer who had already paid.
 - The premium provider contract is intentionally minimal. A production deployment should
   add provider-specific authentication, rate limits and response-size limits.
 - Sessions are a local, HMAC-signed cookie containing the user UUID. Signing prevents

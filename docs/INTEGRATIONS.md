@@ -2,7 +2,8 @@
 
 This document records the official sources Saksi was built against and the decisions
 that shaped each integration. It is deliberately specific: if a statement here is not
-backed by a source or by code in this repository, it is listed under **Unverified**.
+backed by a source, by code in this repository, or by a recorded mainnet run, it is listed
+under **Still unverified**.
 
 ## Sources consulted
 
@@ -248,18 +249,31 @@ receipt for the wrong network and never invents a missing digest.
   falling back to sample data.
 - Logs are pino JSON with a request id. Secrets and raw payloads are redacted.
 
-## Unverified
+## Verified on mainnet
 
-No live calls were made while implementing this repository because no credentials were
-present and no Postgres server or Docker runtime was available. The following therefore
-remain unverified until the corresponding scripts run with real credentials:
+Live calls were made against Sui mainnet on 2 Nov 2026. Each row below was produced by
+running the named command and copying its output; nothing here is estimated.
 
-- Walrus Memory relayer health, write, recall and `listMemories()`.
-- The 10-mainnet-memory threshold.
-- Tatum checkpoint, transaction, balance and event calls.
-- x402 facilitator initialization, payment settlement and receipt headers.
-- A full paid signal purchase with a real Sui digest.
-- Any blob ID, transaction digest or screenshot presented as proof in the README.
+| Area                     | Result                                                                                                                         | Command              |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------ | -------------------- |
+| Walrus Memory relayer    | `status: ok`, relayer `0.1.0`                                                                                                  | `pnpm verify:memory` |
+| Walrus write + recall    | blob `Y-TFsuMq1956BWInd8F26H62S1ohTI8hxT723DMjckE`, cosine distance `0.35874120150280087`, exact text returned                 | `pnpm verify:memory` |
+| `listMemories()`         | 9 memories in the demo namespace, `hasMore: false`                                                                             | `pnpm verify:memory` |
+| Mainnet memories written | 11 rows across `pick_commit`, `pick_reveal`, `outcome`, `preference`, `payment`, `source_roi`                                  | `memory_writes`      |
+| Tatum checkpoint         | `340802699`                                                                                                                    | `pnpm verify:tatum`  |
+| Tatum transaction        | `DemaKkYM7Ni4mRJcxbth3e4h3BkkqgKnR1MYPdWhmgjq`, status `success`, 2 balance changes                                            | `pnpm verify:tatum`  |
+| Tatum balance            | operator agent `0` atomic USDC; merchant `10000` after settlement                                                              | `pnpm verify:tatum`  |
+| x402 settlement          | one real $0.01 USDC purchase, paid by a self-custody browser wallet and verified through Tatum before the payload was released | browser + `payments` |
 
-The code paths fail closed rather than substituting sample data. `README.md` marks proof
-fields as pending instead of inventing values.
+## Still unverified
+
+- `pnpm verify:x402`, the script-driven buyer, has not been run against mainnet. The paid
+  purchase above went through the browser wallet instead, so the script path is code that
+  shares the same client and seller route but has no recorded run of its own.
+- No public deployment exists, so settlement `resource.url` values point at
+  `http://localhost:3000`.
+- The premium signal used for that purchase comes from `scripts/demo-signal-provider.ts`
+  and is a synthetic demo payload, not a real forecast product.
+
+The code paths fail closed rather than substituting sample data. `README.md` marks any
+field it cannot back with real output as `not captured` instead of inventing a value.
