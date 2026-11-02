@@ -1,14 +1,15 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import type { ReactNode } from "react";
 
-// Wallet detection reads `window`, so the provider must not render on the server.
-const DAppKitClientProvider = dynamic(
-  () => import("./dapp-kit-client").then((module) => module.DAppKitClientProvider),
-  { ssr: false },
-);
+import { DAppKitClientProvider } from "./dapp-kit-client";
 
+/**
+ * Rendered from the root layout. The wallet provider used to be loaded through
+ * `next/dynamic` with `ssr: false`, which made Next.js bail out of server rendering for
+ * every route and serve an empty shell instead of HTML. The provider is SSR-safe, so it is
+ * imported normally and the app keeps its server-rendered markup.
+ */
 export function Providers({ children }: { readonly children: ReactNode }) {
   return <DAppKitClientProvider>{children}</DAppKitClientProvider>;
 }

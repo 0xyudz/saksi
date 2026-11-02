@@ -3,8 +3,7 @@ import { getEnv } from "@/lib/env";
 import { AppError } from "@/lib/errors";
 import { toJsonObject } from "@/lib/json";
 import { errorForLog, getLogger } from "@/lib/logger";
-
-export interface AgentBalance {
+export interface MerchantBalance {
   readonly owner: string;
   readonly coinType: string;
   readonly totalBalance: string;
@@ -27,14 +26,14 @@ export async function chainHealth(): Promise<ChainHealth> {
   return { checkpoint, network: env.SUI_NETWORK };
 }
 
-export async function agentBalance(): Promise<AgentBalance> {
+export async function merchantBalance(): Promise<MerchantBalance> {
   const env = getEnv();
   const { result } = await TatumSuiClient.fromEnv().getBalance(
-    env.AGENT_SUI_ADDRESS,
+    env.X402_PAY_TO_ADDRESS,
     env.SUI_USDC_COIN_TYPE,
   );
   return {
-    owner: env.AGENT_SUI_ADDRESS,
+    owner: env.X402_PAY_TO_ADDRESS,
     coinType: result.coinType,
     totalBalance: result.totalBalance,
   };

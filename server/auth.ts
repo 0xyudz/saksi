@@ -51,3 +51,12 @@ export async function requireOperatorUserId(): Promise<string> {
 export function ingestionEnabled(): boolean {
   return getEnv().OPERATOR_HANDLES.length > 0;
 }
+
+/**
+ * Server-rendered pages need the same rule as `requireOperatorUserId`, but without
+ * throwing: a signed-out visitor or a normal journal simply does not see the ingest form
+ * instead of being handed a button that always answers 401/403.
+ */
+export function isOperatorHandle(handle: string): boolean {
+  return getEnv().OPERATOR_HANDLES.includes(handle.toLowerCase());
+}

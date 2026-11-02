@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import { z } from "zod";
 
@@ -103,7 +104,17 @@ export function RecommendationForm({
     }
   }
 
-  if (analysts.length === 0) return null;
+  if (analysts.length === 0) {
+    return (
+      <p className="border-amber/30 bg-amber/5 text-amber rounded-xl border px-4 py-3 text-sm leading-relaxed">
+        Recall needs an analyst to score.{" "}
+        <Link href="/analysts" className="underline">
+          Add one on the analysts page
+        </Link>
+        , then come back.
+      </p>
+    );
+  }
 
   return (
     <div className="space-y-5">

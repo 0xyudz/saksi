@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { z } from "zod";
@@ -61,8 +62,12 @@ export function NewPickForm({ analysts }: { readonly analysts: readonly AnalystO
 
   if (analysts.length === 0) {
     return (
-      <p className="border-amber/30 bg-amber/5 text-amber rounded-xl border px-4 py-3 text-sm">
-        Add an analyst first — a pick needs a subject whose credibility can be scored.
+      <p className="border-amber/30 bg-amber/5 text-amber rounded-xl border px-4 py-3 text-sm leading-relaxed">
+        Add an analyst first — a pick needs a subject whose credibility can be scored.{" "}
+        <Link href="/analysts" className="underline">
+          Add one on the analysts page
+        </Link>
+        .
       </p>
     );
   }

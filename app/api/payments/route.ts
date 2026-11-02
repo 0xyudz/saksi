@@ -1,5 +1,5 @@
 import { handleRoute, jsonResponse } from "@/lib/http";
-import { agentBalance, eventsForDigests } from "@/server/data/chain";
+import { eventsForDigests, merchantBalance } from "@/server/data/chain";
 import { listRecentPayments } from "@/server/data/lifecycle";
 import { errorForLog, getLogger } from "@/lib/logger";
 
@@ -12,12 +12,12 @@ export async function GET(request: Request): Promise<Response> {
     const payments = await listRecentPayments();
 
     const [balance, events] = await Promise.allSettled([
-      agentBalance(),
+      merchantBalance(),
       eventsForDigests(payments.map((payment) => payment.digest)),
     ]);
 
     if (balance.status === "rejected") {
-      getLogger().warn({ error: errorForLog(balance.reason) }, "agent balance unavailable");
+      getLogger().warn({ error: errorForLog(balance.reason) }, "merchant balance unavailable");
     }
     if (events.status === "rejected") {
       getLogger().warn({ error: errorForLog(events.reason) }, "on-chain events unavailable");
@@ -38,7 +38,7 @@ export async function GET(request: Request): Promise<Response> {
         })),
         balance:
           balance.status === "fulfilled"
-            ? { ok: true, ...balance.value }
+            ? { ok: true, role: "merchant", ...balance.value }
             : { ok: false, error: "Tatum balance query failed." },
         events:
           events.status === "fulfilled"

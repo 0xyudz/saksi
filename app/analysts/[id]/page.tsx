@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import { EmptyState, OutcomeBadge, PageHeader, StatCard, StatusBadge } from "@/components/ui";
 import { formatDateTime, formatOdds, formatPercent } from "@/lib/format";
+import { isUuid } from "@/lib/ids";
 import { getSessionUser } from "@/lib/session";
 import {
   analystCredibility,
@@ -15,12 +16,16 @@ import { calibrationBins } from "@/server/scoring/brier";
 export const dynamic = "force-dynamic";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
-  const analyst = await getAnalyst((await params).id);
+  const { id } = await params;
+  if (!isUuid(id)) return { title: "Analyst" };
+  const analyst = await getAnalyst(id);
   return { title: analyst ? analyst.name : "Analyst" };
 }
 
 export default async function AnalystDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  if (!isUuid(id)) notFound();
+
   const [analyst, user, credibility, samples, picks] = await Promise.all([
     getAnalyst(id),
     getSessionUser(),

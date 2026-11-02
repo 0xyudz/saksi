@@ -7,7 +7,7 @@ import { getEnv, suiNetworkSchema } from "@/lib/env";
 import { formatDateTime } from "@/lib/format";
 import { errorForLog, getLogger } from "@/lib/logger";
 import { formatUsd } from "@/lib/price";
-import { agentBalance, eventsForDigests } from "@/server/data/chain";
+import { merchantBalance, eventsForDigests } from "@/server/data/chain";
 import { listRecentPayments } from "@/server/data/lifecycle";
 
 export const dynamic = "force-dynamic";
@@ -17,10 +17,13 @@ export default async function PaymentsPage() {
   const payments = await listRecentPayments(100);
   const digests = payments.map((payment) => payment.digest);
 
-  const [balance, events] = await Promise.allSettled([agentBalance(), eventsForDigests(digests)]);
+  const [balance, events] = await Promise.allSettled([
+    merchantBalance(),
+    eventsForDigests(digests),
+  ]);
 
   if (balance.status === "rejected") {
-    getLogger().warn({ error: errorForLog(balance.reason) }, "agent balance unavailable");
+    getLogger().warn({ error: errorForLog(balance.reason) }, "merchant balance unavailable");
   }
   if (events.status === "rejected") {
     getLogger().warn({ error: errorForLog(events.reason) }, "settlement events unavailable");
@@ -58,7 +61,7 @@ export default async function PaymentsPage() {
             tone="green"
           />
           <StatCard
-            label="Agent USDC balance"
+            label="Merchant USDC balance"
             value={
               balance.status === "fulfilled"
                 ? formatUsd(BigInt(balance.value.totalBalance))
@@ -66,7 +69,7 @@ export default async function PaymentsPage() {
             }
             detail={
               balance.status === "fulfilled"
-                ? "Tatum GraphQL balance"
+                ? "Tatum GraphQL balance of the x402 recipient"
                 : "Tatum balance query failed"
             }
           />
@@ -149,7 +152,7 @@ export default async function PaymentsPage() {
           <aside className="space-y-6">
             <section className="card p-6">
               <p className="mono text-muted text-[10px] tracking-[0.18em] uppercase">
-                Agent account
+                Merchant account
               </p>
               {balance.status === "fulfilled" ? (
                 <div className="mt-3">
@@ -166,8 +169,8 @@ export default async function PaymentsPage() {
                 </div>
               ) : (
                 <p className="text-red mt-3 text-xs leading-relaxed">
-                  Tatum did not return the agent balance. The query is not retried with a different
-                  provider or replaced with a cached value.
+                  Tatum did not return the merchant balance. The query is not retried with a
+                  different provider or replaced with a cached value.
                 </p>
               )}
             </section>

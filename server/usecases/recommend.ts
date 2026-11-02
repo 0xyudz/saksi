@@ -14,7 +14,7 @@ import type {
 } from "@/lib/domain";
 import { AppError } from "@/lib/errors";
 import { getLogger, errorForLog } from "@/lib/logger";
-import { analystCredibility } from "@/server/data/picks";
+import { analystCredibility, getAnalyst, pickForUser } from "@/server/data/picks";
 
 export const recommendSchema = z.object({
   analystId: z.string().uuid(),
@@ -63,9 +63,17 @@ export async function recommend(userId: string, input: RecommendInput): Promise<
     "analyst bias credibility source roi",
   ].join(" | ");
 
+  // Both ids are foreign keys on the recommendation row. Validate them here so a stale
+  // analyst or someone else's pick returns 404 instead of a Postgres constraint error.
+  const analyst = await getAnalyst(input.analystId);
+  if (!analyst) throw new AppError("NOT_FOUND", "The selected analyst does not exist.");
+  if (input.pickId !== undefined) {
+    const pick = await pickForUser(input.pickId, userId);
+    if (!pick) throw new AppError("NOT_FOUND", "That pick does not belong to this journal.");
+  }
+
   const credibility = await analystCredibility(input.analystId);
   const recalled = await recall(userId, query);
-
   const warnings: RecommendationWarning[] = [];
   const sources: RecommendationSource[] = [];
   const reasons: string[] = [];

@@ -5,6 +5,7 @@ import { RevealButton } from "@/components/forms/RevealButton";
 import { ResolveForm } from "@/components/forms/ResolveForm";
 import { Hash, OutcomeBadge, PageHeader, ProofLine, StatusBadge } from "@/components/ui";
 import { formatDate, formatDateTime, formatOdds, formatPercent } from "@/lib/format";
+import { isUuid } from "@/lib/ids";
 import { getSessionUser } from "@/lib/session";
 import { getPickDetail } from "@/server/data/picks";
 import { presentPick } from "@/server/presenters/pick";
@@ -13,12 +14,15 @@ import { verifyCommitment } from "@/server/scoring/commitment";
 export const dynamic = "force-dynamic";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
-  const detail = await getPickDetail((await params).id);
+  const { id } = await params;
+  if (!isUuid(id)) return { title: "Pick" };
+  const detail = await getPickDetail(id);
   return { title: detail ? `${detail.pick.market} · pick` : "Pick" };
 }
 
 export default async function PickDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  if (!isUuid(id)) notFound();
   const detail = await getPickDetail(id);
   if (!detail) notFound();
 

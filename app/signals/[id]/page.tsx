@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { PurchaseSignalPanel } from "@/components/forms/PurchaseSignalPanel";
 import { PageHeader, ProofLine } from "@/components/ui";
 import { formatDateTime } from "@/lib/format";
+import { isUuid } from "@/lib/ids";
 import { formatUsd } from "@/lib/price";
 import { getSessionUser } from "@/lib/session";
 import { recentPicks } from "@/server/data/picks";
@@ -12,12 +13,15 @@ import { findSignalById } from "@/server/data/signals";
 export const dynamic = "force-dynamic";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
-  const signal = await findSignalById((await params).id);
+  const { id } = await params;
+  if (!isUuid(id)) return { title: "Signal" };
+  const signal = await findSignalById(id);
   return { title: signal ? signal.title : "Signal" };
 }
 
 export default async function SignalDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  if (!isUuid(id)) notFound();
   const [signal, user] = await Promise.all([findSignalById(id), getSessionUser()]);
   if (!signal) notFound();
 

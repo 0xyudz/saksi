@@ -113,7 +113,7 @@ Queries used:
 | ------------------------------------------------------------------- | --------------------------------------- |
 | `checkpoint { sequenceNumber }`                                     | `/api/health`, `verify-tatum.ts`        |
 | `transaction(digest) { effects { ... } }`                           | payment verification, `verify-tatum.ts` |
-| `address(address) { balance(coinType) { totalBalance } }`           | agent USDC balance on `/payments`       |
+| `address(address) { balance(coinType) { totalBalance } }`           | merchant USDC balance on `/payments`    |
 | `transaction(digest) { effects { events { nodes { contents } } } }` | settlement event feed on `/payments`    |
 
 GraphQL caps a connection page at 50 nodes. Payment verification follows

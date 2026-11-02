@@ -15,7 +15,7 @@ Built for **Total Recall — Tatum × Walrus Memory** (Track 1: Markets & Sports
 | ------------------------------------- | ------------------------------------------------------------------------- |
 | `pnpm typecheck`                      | passes                                                                    |
 | `pnpm lint`                           | passes                                                                    |
-| `pnpm test`                           | 77 tests pass across 12 files                                             |
+| `pnpm test`                           | 82 tests pass across 13 files                                             |
 | `pnpm build`                          | passes (Next.js 16.4.3, Turbopack)                                        |
 | Migrations generated                  | `0000`, `0001`, `0002_graceful_vindicator.sql`                            |
 | Migrations applied to a live database | yes — 8 tables on a live Postgres instance                                |
@@ -99,7 +99,7 @@ addresses, networks, prices or namespace prefixes are rejected at startup.
 | `TATUM_SUI_RPC_URL`              | yes      | Tatum Sui GraphQL endpoint (`/graphql`)                                        |
 | `SUI_NETWORK`                    | yes      | `sui:mainnet` or `sui:testnet`                                                 |
 | `SUI_USDC_COIN_TYPE`             | yes      | coin type used for balances and verification                                   |
-| `AGENT_SUI_ADDRESS`              | yes      | operator wallet shown on `/payments`                                           |
+| `AGENT_SUI_ADDRESS`              | yes      | operator wallet used by `pnpm verify:x402` to pay for a signal                 |
 | `TATUM_VERIFY_DIGEST`            | no       | required only by `pnpm verify:tatum`                                           |
 | `X402_FACILITATOR_URL`           | yes      | Tentacle Pay facilitator                                                       |
 | `X402_PAY_TO_ADDRESS`            | yes      | Sui recipient of signal payments                                               |
@@ -233,7 +233,7 @@ applied** in this workspace because no PostgreSQL runtime was available. Run
 | `/analysts`, `/analysts/[id]`         | leaderboard and calibration/evidence                                                            |
 | `/memory`                             | relayer health, fetched `listMemories()` pages, recall with paired citations                    |
 | `/signals`, `/signals/[id]`           | provider listings and paid purchase panel                                                       |
-| `/payments`                           | settlement ledger, agent balance, events, manual digest verification                            |
+| `/payments`                           | settlement ledger, merchant balance, events, manual digest verification                         |
 
 API:
 
@@ -245,7 +245,7 @@ API:
 | `POST /api/recommendations`    | recall before deciding; persists citations               |
 | `GET /api/signals/[id]`        | x402 paywall; Tatum verification before release          |
 | `POST /api/payments/verify`    | read-only Tatum check; reports `recorded`, never inserts |
-| `GET /api/payments`            | ledger + Tatum balance/events                            |
+| `GET /api/payments`            | ledger + Tatum merchant balance/events                   |
 | `GET /api/health`              | database + Walrus + Tatum checks, no secrets             |
 | `POST /api/session`            | create a journal; returns the recovery code once         |
 | `PATCH /api/session`           | resume with handle + recovery code; rate limited         |
@@ -269,8 +269,8 @@ pnpm verify:x402
 
 `verify:memory` writes a uniquely marked preference memory, recalls it, asserts the exact
 text is returned, and prints the blob ID plus relayer count. `verify:tatum` checks the
-latest checkpoint, a real transaction and the agent balance. `verify:x402` buys the
-paywalled signal, prints the digest, and independently verifies it through Tatum.
+latest checkpoint, a real transaction and the operator wallet balance. `verify:x402` buys
+the paywalled signal, prints the digest, and independently verifies it through Tatum.
 
 ## Tests
 
@@ -307,6 +307,7 @@ Every step is an HTTP call, so it can be re-run against a deployment:
 | `POST /api/payments/verify`       | 200, `verified: true`, and `recorded` reflects the ledger only |
 | 34 rapid requests to one signal   | 30 × 402 then 429, confirming the per-IP limiter               |
 | `POST /api/picks` unauthenticated | 401                                                            |
+| `GET /picks/not-a-uuid`           | 404 not-found page, with no `Failed query` in the response     |
 
 ## Security notes
 
@@ -331,6 +332,11 @@ Every step is an HTTP call, so it can be re-run against a deployment:
   `x-saksi-client: agent` header. The public x402 agent route keeps the looser origin rule.
 - `/api/payments/verify` and `GET /api/signals/[id]` have an in-memory per-IP limiter
   (10/min and 30/min). It is per-instance only and does not replace an edge limiter.
+- Detail routes validate the id shape before querying Postgres, so a malformed or stale
+  link renders the not-found page with a real `404` instead of a database error page.
+- Pages are server rendered. The Sui wallet provider is mounted from the root layout
+  without `ssr: false`; it only registers browser wallet initializers when `window`
+  exists, so the HTML is complete before hydration.
 
 ## Proof
 
@@ -346,7 +352,7 @@ guessed.
 | Walrus Memory blob ID (sealed pick) | `RruPtIKgN3QZyEmUNOIVqA_yrk8mBylE8Bsg4h9O0NA` (`pick_commit`)                                       | `memory_writes`        |
 | Walrus Memory blob ID (payment)     | `iQkdVACTG5arG58RDCnYr74_dJPeueaeJ9NTGheeBRA` (`payment`)                                           | `memory_writes`        |
 | Walrus Memory blob ID (source ROI)  | `KkHx_aFl4YkIBBGF3bQ4hMMljtdhshUUTVMxhEqbjcE` (`source_roi`)                                        | `memory_writes`        |
-| Mainnet memories written            | 22 rows: `pick_commit` 7, `pick_reveal` 4, `outcome` 4, `preference` 5, `payment` 1, `source_roi` 1 | `memory_writes`        |
+| Mainnet memories written            | 27 rows: `pick_commit` 9, `pick_reveal` 5, `outcome` 5, `preference` 6, `payment` 1, `source_roi` 1 | `memory_writes`        |
 | Tatum checkpoint                    | `340802699`                                                                                         | `pnpm verify:tatum`    |
 | Tatum transaction digest            | `DemaKkYM7Ni4mRJcxbth3e4h3BkkqgKnR1MYPdWhmgjq` — status `success`, 2 balance changes                | `pnpm verify:tatum`    |
 | x402 settlement digest              | `DemaKkYM7Ni4mRJcxbth3e4h3BkkqgKnR1MYPdWhmgjq` — 10000 atomic USDC, `sui:mainnet`                   | browser wallet + Tatum |
@@ -361,7 +367,7 @@ Reproduce the two script-backed rows with:
 
 ```bash
 pnpm verify:memory   # relayer status, blob ID, recall distance, listMemories count
-pnpm verify:tatum    # checkpoint, transaction status, balance changes, agent balance
+pnpm verify:tatum    # checkpoint, transaction status, balance changes, operator balance
 ```
 
 The x402 row is a browser-driven purchase: the buyer connected their own Sui wallet,

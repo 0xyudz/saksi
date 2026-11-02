@@ -4,15 +4,16 @@ import { SignalIngestForm } from "@/components/forms/SignalIngestForm";
 import { EmptyState, PageHeader } from "@/components/ui";
 import { formatDateTime } from "@/lib/format";
 import { formatAtomic } from "@/lib/price";
-import { ingestionEnabled } from "@/server/auth";
+import { getSessionUser } from "@/lib/session";
+import { ingestionEnabled, isOperatorHandle } from "@/server/auth";
 import { listSignals } from "@/server/data/signals";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Signals" };
 
 export default async function SignalsPage() {
-  const items = await listSignals();
-  const canIngest = ingestionEnabled();
+  const [items, user] = await Promise.all([listSignals(), getSessionUser()]);
+  const canIngest = ingestionEnabled() && user !== null && isOperatorHandle(user.handle);
 
   return (
     <div>
@@ -32,7 +33,7 @@ export default async function SignalsPage() {
           {items.length === 0 ? (
             <EmptyState
               title="No signals ingested"
-              description="Once SIGNAL_PROVIDER_API_URL and SIGNAL_PROVIDER_API_KEY are configured, ingest a real provider signal. Without them this feature returns 503 instead of inventing data."
+              description="Once SIGNAL_PROVIDER_API_URL and SIGNAL_PROVIDER_API_KEY are configured, an operator journal can ingest a provider signal. Without them this feature returns 503 instead of inventing data."
             />
           ) : (
             <div className="space-y-3">
