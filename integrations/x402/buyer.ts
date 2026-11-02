@@ -8,6 +8,7 @@ import { z } from "zod";
 
 import { getEnv } from "@/lib/env";
 import { AppError } from "@/lib/errors";
+import { parsePriceToAtomic } from "@/lib/price";
 
 const signalResponseSchema = z
   .object({
@@ -51,6 +52,12 @@ let state: BuyerState | undefined;
 
 function signerFromEnv(): ClientSuiSigner {
   const env = getEnv();
+  if (env.X402_CLIENT_PRIVATE_KEY === undefined) {
+    throw new AppError(
+      "CONFIGURATION_ERROR",
+      "X402_CLIENT_PRIVATE_KEY is required only for `pnpm verify:x402`; browser purchases use the connected wallet.",
+    );
+  }
   const keypair = Ed25519Keypair.fromSecretKey(env.X402_CLIENT_PRIVATE_KEY);
   return {
     address: keypair.toSuiAddress() as `0x${string}`,
@@ -65,7 +72,19 @@ function getBuyer(): BuyerState {
   if (state) return state;
 
   const env = getEnv();
-  const client = new x402Client().register(env.SUI_NETWORK, new ExactSuiScheme(signerFromEnv()));
+  // Sui USDC is not a "default" x402 asset, so the spend controls must opt in explicitly.
+  const client = x402Client.fromConfig({
+    schemes: [{ network: env.SUI_NETWORK, client: new ExactSuiScheme(signerFromEnv()) }],
+    spendControls: {
+      allowedAssets: [
+        {
+          network: env.SUI_NETWORK,
+          asset: env.SUI_USDC_COIN_TYPE,
+          maxAmountPerPayment: parsePriceToAtomic(env.X402_PRICE).toString(),
+        },
+      ],
+    },
+  });
   state = { client, fetchWithPayment: wrapFetchWithPayment(fetch, client) };
   return state;
 }

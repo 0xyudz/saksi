@@ -90,7 +90,7 @@ export default async function SignalsPage() {
               </li>
               <li>
                 <span className="text-amber">02</span> x402 returns payment requirements for the
-                configured Sui network.
+                configured Sui network; the buyer&apos;s connected wallet signs the payment.
               </li>
               <li>
                 <span className="text-amber">03</span> Facilitator settles the exact payment; the

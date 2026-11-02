@@ -68,9 +68,9 @@ export default async function SignalDetailPage({ params }: { params: Promise<{ i
             <p className="mono text-amber text-[10px] tracking-[0.18em] uppercase">Buy this call</p>
             <h2 className="display mt-2 text-3xl">Pay, verify, then read.</h2>
             <p className="text-muted mt-2 mb-5 text-xs leading-relaxed">
-              The buyer wallet configured in the environment signs the x402 payment. You can link
-              the purchase to one of your picks so the provider&apos;s ROI can be scored against a
-              resolved outcome.
+              Connect your own Sui wallet and sign the x402 payment from your balance. Saksi never
+              receives your private key. You can link the purchase to one of your picks so the
+              provider&apos;s ROI can be scored against a resolved outcome.
             </p>
 
             {user ? (

@@ -190,21 +190,31 @@ client GET /api/signals/:id
   -> seller records the settlement (userId nullable)
 ```
 
-The buyer later claims that audit row by digest, which keeps `payments.digest` unique and
-makes retries idempotent.
+The seller records a purchase already attributed when the paid request carries a journal
+session (`userId` + optional `pickId`). A script-only purchase leaves `userId` null; that
+row can be claimed later by digest, which keeps `payments.digest` unique and makes retries
+idempotent.
 
 ### Buyer
 
-`integrations/x402/buyer.ts` uses:
+Signal purchases are self-custody. The browser mounts `DAppKitProvider` from
+`@mysten/dapp-kit-react` against Sui mainnet, the buyer connects their own wallet, and
+`lib/x402-wallet.ts` asks the wallet to sign the Sui transaction that
+`@tentaclepay/sui-x402` builds. The private key never reaches the server, and the merchant
+payee (`X402_PAY_TO_ADDRESS`) stays operator-owned.
 
-- `x402Client` from `@x402/core/client`
+`lib/x402-wallet.ts` uses:
+
+- `x402Client.fromConfig()`, with `spendControls.allowedAssets` populated from the 402
+  challenge because Sui USDC is not an x402 "default" asset
 - `ExactSuiScheme` from `@tentaclepay/sui-x402/exact/client`
 - `wrapFetchWithPayment` from `@x402/fetch`
-- `Ed25519Keypair` from `@mysten/sui/keypairs/ed25519`
 - `x402HTTPClient.getPaymentSettleResponse(...)` to read the settle receipt
 
-The buyer re-verifies the digest through Tatum even though the seller already did. This
-protects the buyer side from a malicious or compromised seller response.
+`integrations/x402/buyer.ts` keeps the same flow for `pnpm verify:x402` only. It reads
+`X402_CLIENT_PRIVATE_KEY` from the environment and re-verifies the digest through Tatum
+even though the seller already did. This protects the buyer side from a malicious or
+compromised seller response.
 
 ### Receipt parsing
 

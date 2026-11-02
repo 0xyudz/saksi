@@ -39,7 +39,8 @@ const envSchema = z
     X402_FACILITATOR_URL: httpUrl,
     X402_PAY_TO_ADDRESS: suiAddress,
     X402_PRICE: price.default("$0.01"),
-    X402_CLIENT_PRIVATE_KEY: nonEmpty,
+    /** Only `pnpm verify:x402` needs the key; the browser signs purchases with the user's wallet. */
+    X402_CLIENT_PRIVATE_KEY: nonEmpty.optional(),
     X402_TEST_SIGNAL_ID: z.string().uuid().optional(),
 
     SIGNAL_PROVIDER_API_URL: httpUrl.optional(),
@@ -71,21 +72,24 @@ const envSchema = z
       });
     }
 
-    try {
-      const derived = Ed25519Keypair.fromSecretKey(value.X402_CLIENT_PRIVATE_KEY).toSuiAddress();
-      if (derived.toLowerCase() !== value.AGENT_SUI_ADDRESS.toLowerCase()) {
+    if (value.X402_CLIENT_PRIVATE_KEY !== undefined) {
+      try {
+        const derived = Ed25519Keypair.fromSecretKey(value.X402_CLIENT_PRIVATE_KEY).toSuiAddress();
+        if (derived.toLowerCase() !== value.AGENT_SUI_ADDRESS.toLowerCase()) {
+          ctx.addIssue({
+            code: "custom",
+            path: ["AGENT_SUI_ADDRESS"],
+            message:
+              "AGENT_SUI_ADDRESS does not match the key derived from X402_CLIENT_PRIVATE_KEY",
+          });
+        }
+      } catch {
         ctx.addIssue({
           code: "custom",
-          path: ["AGENT_SUI_ADDRESS"],
-          message: "AGENT_SUI_ADDRESS does not match the key derived from X402_CLIENT_PRIVATE_KEY",
+          path: ["X402_CLIENT_PRIVATE_KEY"],
+          message: "X402_CLIENT_PRIVATE_KEY could not be parsed as an Ed25519 key",
         });
       }
-    } catch {
-      ctx.addIssue({
-        code: "custom",
-        path: ["X402_CLIENT_PRIVATE_KEY"],
-        message: "X402_CLIENT_PRIVATE_KEY could not be parsed as an Ed25519 key",
-      });
     }
   });
 

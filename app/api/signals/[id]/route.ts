@@ -11,6 +11,7 @@ import { parsePriceToAtomic } from "@/lib/price";
 import { assertWithinRateLimit } from "@/lib/rate-limit";
 import { authorizePayment } from "@/integrations/x402/seller";
 import { optionalApiUserId } from "@/server/auth";
+import { pickForUser } from "@/server/data/picks";
 import { assertSignalPriceMatches } from "@/server/scoring/payment-binding";
 import { getSignal } from "@/server/usecases/ingest-signal";
 import { verifyAndRecordSignalPayment } from "@/server/usecases/purchase-signal";
@@ -49,6 +50,23 @@ export async function GET(
     const signal = await getSignal(parsed.data);
     assertSignalPriceMatches(signal.priceAtomic, parsePriceToAtomic(getEnv().X402_PRICE));
 
+    // The browser may attach a pick so the provider's ROI can be scored later. Validate
+    // ownership before the facilitator settles anything.
+    const pickIdParam = request.nextUrl.searchParams.get("pickId");
+    const pickId = pickIdParam === null ? null : idSchema.safeParse(pickIdParam);
+    if (pickId !== null && !pickId.success) {
+      throw new AppError("VALIDATION_FAILED", "Invalid pick id.");
+    }
+
+    const userId = await optionalApiUserId();
+    if (pickId !== null) {
+      if (userId === undefined) {
+        throw new AppError("UNAUTHORIZED", "Start a journal before linking a payment to a pick.");
+      }
+      const pick = await pickForUser(pickId.data, userId);
+      if (!pick) throw new AppError("NOT_FOUND", "That pick does not belong to this journal.");
+    }
+
     const authorization = await authorizePayment(request);
     if (authorization.kind === "payment-required") {
       return paymentResponse(authorization.result.response, requestId);
@@ -59,7 +77,6 @@ export async function GET(
       throw new AppError("PAYMENT_NOT_VERIFIED", "The settlement did not return a digest.");
     }
 
-    const userId = await optionalApiUserId();
     const verified = await verifyAndRecordSignalPayment({
       signalId: parsed.data,
       digest,
@@ -67,6 +84,7 @@ export async function GET(
       resource: authorization.resource,
       requirements: toJsonObject(authorization.paymentRequirements),
       ...(userId === undefined ? {} : { userId }),
+      ...(pickId === null ? {} : { pickId: pickId.data }),
     });
 
     const headers = new Headers(authorization.settlement.headers);
@@ -92,6 +110,7 @@ export async function GET(
           coinType: verified.coinType,
           amountAtomic: verified.amountAtomic,
         },
+        memory: { blobIds: verified.memoryBlobIds },
       },
       requestId,
       { headers },

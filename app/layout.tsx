@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { AppFooter } from "@/components/AppFooter";
 import { AppNav } from "@/components/AppNav";
 import { APP_NAME, APP_TAGLINE } from "@/lib/config";
+import { Providers } from "./providers";
 
 import "./globals.css";
 
@@ -20,9 +21,11 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="en">
       <body className="min-h-screen antialiased">
-        <AppNav />
-        <main className="min-h-[70vh]">{children}</main>
-        <AppFooter />
+        <Providers>
+          <AppNav />
+          <main className="min-h-[70vh]">{children}</main>
+          <AppFooter />
+        </Providers>
       </body>
     </html>
   );

@@ -93,7 +93,7 @@ export default async function PaymentsPage() {
               <div className="mt-5">
                 <EmptyState
                   title="No settlements recorded"
-                  description="Buy a signal through the x402 endpoint. The seller records the digest before releasing the payload, and the buyer claims the audit row once Tatum confirms it."
+                  description="Buy a signal with your own Sui wallet. The seller verifies the digest through Tatum before releasing the payload, then records the receipt against your journal."
                   action={
                     <Link href="/signals" className="btn btn-primary">
                       Find a signal

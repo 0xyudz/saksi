@@ -1,35 +1,12 @@
 "use client";
 
+import { useCurrentAccount, useDAppKit } from "@mysten/dapp-kit-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { z } from "zod";
 
-import { requestJson } from "@/lib/client-api";
+import { WalletMenu } from "@/components/WalletMenu";
 import { shortHash } from "@/lib/format";
-
-const responseSchema = z
-  .object({
-    signal: z
-      .object({
-        id: z.string(),
-        provider: z.string(),
-        title: z.string(),
-        payload: z.unknown(),
-      })
-      .loose(),
-    payment: z
-      .object({
-        digest: z.string(),
-        payer: z.string().nullable(),
-        explorerUrl: z.string().url(),
-        amountAtomic: z.string(),
-      })
-      .loose(),
-    memory: z.object({ blobIds: z.array(z.string()) }).loose(),
-  })
-  .loose();
-
-type PurchaseResult = z.infer<typeof responseSchema>;
+import { buySignalWithWallet, type WalletPaymentResult } from "@/lib/x402-wallet";
 
 export interface PurchasePickOption {
   readonly id: string;
@@ -44,25 +21,37 @@ export function PurchaseSignalPanel({
   readonly pickOptions: readonly PurchasePickOption[];
 }) {
   const router = useRouter();
+  const account = useCurrentAccount();
+  const dAppKit = useDAppKit();
   const [pickId, setPickId] = useState("");
-  const [result, setResult] = useState<PurchaseResult | null>(null);
+  const [result, setResult] = useState<WalletPaymentResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
   async function purchase() {
+    if (!account) {
+      setError("Connect a Sui wallet before paying.");
+      return;
+    }
+
     setPending(true);
     setError(null);
     try {
-      const parsed = await requestJson({
-        url: "/api/payments/purchase",
-        method: "POST",
-        body: {
-          signalId,
-          ...(pickId.length === 0 ? {} : { pickId }),
+      const paid = await buySignalWithWallet({
+        signalId,
+        ...(pickId.length === 0 ? {} : { pickId }),
+        signer: {
+          address: account.address as `0x${string}`,
+          signTransaction: async (bytes) => {
+            const { signature } = await dAppKit.signTransaction({
+              transaction: bytes,
+              network: "mainnet",
+            });
+            return signature;
+          },
         },
-        schema: responseSchema,
       });
-      setResult(parsed);
+      setResult(paid);
       router.refresh();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Purchase failed.");
@@ -71,8 +60,22 @@ export function PurchaseSignalPanel({
     }
   }
 
+  if (!account) {
+    return (
+      <div className="border-amber/30 bg-amber/5 text-amber space-y-3 rounded-xl border p-4 text-sm leading-relaxed">
+        <p>
+          Connect a Sui wallet to pay from your own balance. The payment is signed in your wallet;
+          Saksi never receives your private key.
+        </p>
+        <WalletMenu />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
+      <p className="mono text-muted text-[11px] break-all">paying from {account.address}</p>
+
       {pickOptions.length > 0 ? (
         <div>
           <label className="label" htmlFor="purchase-pick">
@@ -95,7 +98,7 @@ export function PurchaseSignalPanel({
       ) : null}
 
       <button type="button" className="btn btn-primary" onClick={purchase} disabled={pending}>
-        {pending ? "Paying & verifying on Sui…" : "Buy with x402 on Sui"}
+        {pending ? "Signing & verifying on Sui…" : "Pay with my wallet"}
       </button>
 
       {error ? (
@@ -114,14 +117,14 @@ export function PurchaseSignalPanel({
             {JSON.stringify(result.signal.payload, null, 2)}
           </pre>
           <div className="border-line text-muted mt-3 space-y-1 border-t pt-3 text-[11px]">
-            <p className="mono break-all">digest {result.payment.digest}</p>
-            <p className="mono">payer {result.payment.payer ?? "unknown"}</p>
-            <p className="mono">amount {result.payment.amountAtomic} atomic</p>
-            {result.memory.blobIds.length > 0 ? (
-              <p className="mono">memory {shortHash(result.memory.blobIds[0] ?? "", 12, 10)}</p>
+            <p className="mono break-all">digest {result.digest}</p>
+            <p className="mono">payer {result.payer ?? "unknown"}</p>
+            <p className="mono">amount {result.amountAtomic} atomic</p>
+            {result.memoryBlobIds.length > 0 ? (
+              <p className="mono">memory {shortHash(result.memoryBlobIds[0] ?? "", 12, 10)}</p>
             ) : null}
             <a
-              href={result.payment.explorerUrl}
+              href={result.explorerUrl}
               target="_blank"
               rel="noreferrer"
               className="link-underline text-amber inline-block"

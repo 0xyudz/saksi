@@ -4,7 +4,6 @@ import { getDb } from "@/db/client";
 import { payments, type PaymentRow, type SignalRow } from "@/db/schema";
 import { remember } from "@/integrations/walrus-memory/client";
 import { buildPaymentMemory, buildSourceRoiMemory } from "@/integrations/walrus-memory/schema";
-import { buySignal } from "@/integrations/x402/buyer";
 import { verifyPayment, type VerifiedPayment } from "@/integrations/tatum/verify-payment";
 import type { JsonObject } from "@/lib/domain";
 import { getEnv } from "@/lib/env";
@@ -170,57 +169,6 @@ async function writePaymentMemories(userId: string, payment: PaymentRow): Promis
   }
 
   return blobIds;
-}
-
-export interface PurchasedSignal {
-  readonly signal: Awaited<ReturnType<typeof getSignal>>;
-  readonly payment: PaymentRow;
-  readonly digest: string;
-  readonly payer: string | null;
-  readonly explorerUrl: string;
-  readonly memoryBlobIds: readonly string[];
-}
-
-export async function purchaseSignal(
-  userId: string,
-  signalId: string,
-  pickId?: string,
-): Promise<PurchasedSignal> {
-  const env = getEnv();
-  const signal = await getSignal(signalId);
-  const purchase = await buySignal(signalId);
-
-  if (purchase.body.signal.id !== signalId) {
-    throw new AppError("UPSTREAM_UNAVAILABLE", "The paid endpoint returned the wrong signal.");
-  }
-
-  const verified = await verifyPaymentWithRetry({
-    digest: purchase.digest,
-    payTo: env.X402_PAY_TO_ADDRESS,
-    minAmountAtomic: signal.priceAtomic,
-    network: env.SUI_NETWORK,
-  });
-
-  const recorded = await recordPayment({
-    verified,
-    signalId,
-    resource: `${env.APP_BASE_URL.replace(/\/+$/, "")}/api/signals/${encodeURIComponent(signalId)}`,
-    userId,
-    ...(pickId === undefined ? {} : { pickId }),
-  });
-
-  const memoryBlobIds = recorded.attributed
-    ? await writePaymentMemories(userId, recorded.payment)
-    : [];
-
-  return {
-    signal,
-    payment: recorded.payment,
-    digest: verified.digest,
-    payer: purchase.payer,
-    explorerUrl: verified.explorerUrl,
-    memoryBlobIds,
-  };
 }
 
 export interface VerifiedSignalPayment {

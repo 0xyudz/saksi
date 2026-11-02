@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { LogoutButton } from "@/components/forms/LogoutButton";
+import { WalletMenu } from "@/components/WalletMenu";
 import { getSessionUser } from "@/lib/session";
 
 const LINKS = [
@@ -56,6 +57,7 @@ export async function AppNav() {
               Start journal
             </Link>
           )}
+          <WalletMenu />
         </div>
       </div>
       <nav className="container-page flex gap-1 overflow-x-auto pb-2 md:hidden">

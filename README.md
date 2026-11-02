@@ -37,10 +37,10 @@ result is claimed below. See [Proof](#proof) and [docs/INTEGRATIONS.md](docs/INT
 3. **Memory-driven recommendations** — Walrus Memory is recalled before a new pick. Each
    warning cites the exact blob and cosine distance from the parsed memory that produced
    it; paid-source ROI is included.
-4. **x402 premium signals on Sui** — seller paywall with Tentacle Pay facilitator, buyer
-   agent using `@x402/fetch`, Tatum verification before the payload leaves the server,
-   idempotent receipts bound to one signal and resource, read-only digest inspection, and
-   payment/source-ROI memories.
+4. **x402 premium signals on Sui** — seller paywall with Tentacle Pay facilitator, a
+   browser wallet signing each payment through `@mysten/dapp-kit-react`, Tatum
+   verification before the payload leaves the server, idempotent receipts bound to one
+   signal and resource, read-only digest inspection, and payment/source-ROI memories.
 5. **On-chain proof** — Tatum GraphQL `checkpoint`, `transaction` and `address.balance`
    queries power the payment ledger, balance, events and explorer links.
 6. **Dashboard** — credibility leaderboard, analyst detail with calibration, memory ledger
@@ -57,7 +57,7 @@ Requirements:
 - Walrus Memory account and delegate key
 - Tatum API key and the Sui mainnet GraphQL gateway
 - Tentacle Pay facilitator access and a Sui payee address
-- A buyer wallet funded for the selected network
+- A Sui mainnet wallet funded with USDC in the browser that buys signals
 - Optionally, a premium signal provider implementing the contract below
 
 ```bash
@@ -78,36 +78,36 @@ Open `http://localhost:3000`, create a journal at `/onboarding`, then visit `/pi
 All values are validated in `lib/env.ts` with zod. Empty strings and malformed URLs,
 addresses, networks, prices or namespace prefixes are rejected at startup.
 
-| Variable                         | Required | Purpose                                          |
-| -------------------------------- | -------- | ------------------------------------------------ |
-| `DATABASE_URL`                   | yes      | PostgreSQL connection string                     |
-| `WALRUS_MEMORY_PRIVATE_KEY`      | yes      | MemWal delegate private key                      |
-| `WALRUS_MEMORY_ACCOUNT_ID`       | yes      | MemWalAccount object id                          |
-| `WALRUS_MEMORY_RELAYER_URL`      | yes      | Walrus Memory relayer base URL                   |
-| `WALRUS_MEMORY_NAMESPACE_PREFIX` | yes      | lowercase namespace prefix; user id is appended  |
-| `TATUM_API_KEY`                  | yes      | sent as `x-api-key` to Tatum                     |
-| `TATUM_SUI_RPC_URL`              | yes      | Tatum Sui GraphQL endpoint (`/graphql`)          |
-| `SUI_NETWORK`                    | yes      | `sui:mainnet` or `sui:testnet`                   |
-| `SUI_USDC_COIN_TYPE`             | yes      | coin type used for balances and verification     |
-| `AGENT_SUI_ADDRESS`              | yes      | agent wallet shown on `/payments`                |
-| `TATUM_VERIFY_DIGEST`            | no       | required only by `pnpm verify:tatum`             |
-| `X402_FACILITATOR_URL`           | yes      | Tentacle Pay facilitator                         |
-| `X402_PAY_TO_ADDRESS`            | yes      | Sui recipient of signal payments                 |
-| `X402_PRICE`                     | no       | USD string or atomic amount; defaults to `$0.01` |
-| `X402_CLIENT_PRIVATE_KEY`        | yes      | buyer agent key used by `@x402/fetch`            |
-| `X402_TEST_SIGNAL_ID`            | no       | required only by `pnpm verify:x402`              |
-| `SIGNAL_PROVIDER_API_URL`        | no       | optional pair with the next value                |
-| `SIGNAL_PROVIDER_API_KEY`        | no       | optional pair with the previous value            |
-| `APP_BASE_URL`                   | yes      | public base URL used by the buyer agent          |
-| `SESSION_SECRET`                 | yes      | at least 32 chars; signs the session cookie      |
-| `LOG_LEVEL`                      | no       | pino level; defaults to `info`                   |
-| `WALRUS_RECALL_LIMIT`            | no       | recall size; defaults to 10                      |
+| Variable                         | Required | Purpose                                                                        |
+| -------------------------------- | -------- | ------------------------------------------------------------------------------ |
+| `DATABASE_URL`                   | yes      | PostgreSQL connection string                                                   |
+| `WALRUS_MEMORY_PRIVATE_KEY`      | yes      | MemWal delegate private key                                                    |
+| `WALRUS_MEMORY_ACCOUNT_ID`       | yes      | MemWalAccount object id                                                        |
+| `WALRUS_MEMORY_RELAYER_URL`      | yes      | Walrus Memory relayer base URL                                                 |
+| `WALRUS_MEMORY_NAMESPACE_PREFIX` | yes      | lowercase namespace prefix; user id is appended                                |
+| `TATUM_API_KEY`                  | yes      | sent as `x-api-key` to Tatum                                                   |
+| `TATUM_SUI_RPC_URL`              | yes      | Tatum Sui GraphQL endpoint (`/graphql`)                                        |
+| `SUI_NETWORK`                    | yes      | `sui:mainnet` or `sui:testnet`                                                 |
+| `SUI_USDC_COIN_TYPE`             | yes      | coin type used for balances and verification                                   |
+| `AGENT_SUI_ADDRESS`              | yes      | operator wallet shown on `/payments`                                           |
+| `TATUM_VERIFY_DIGEST`            | no       | required only by `pnpm verify:tatum`                                           |
+| `X402_FACILITATOR_URL`           | yes      | Tentacle Pay facilitator                                                       |
+| `X402_PAY_TO_ADDRESS`            | yes      | Sui recipient of signal payments                                               |
+| `X402_PRICE`                     | no       | USD string or atomic amount; defaults to `$0.01`                               |
+| `X402_CLIENT_PRIVATE_KEY`        | no       | required only by `pnpm verify:x402`; browser buyers sign with their own wallet |
+| `X402_TEST_SIGNAL_ID`            | no       | required only by `pnpm verify:x402`                                            |
+| `SIGNAL_PROVIDER_API_URL`        | no       | optional pair with the next value                                              |
+| `SIGNAL_PROVIDER_API_KEY`        | no       | optional pair with the previous value                                          |
+| `APP_BASE_URL`                   | yes      | public base URL used by the app and scripts                                    |
+| `SESSION_SECRET`                 | yes      | at least 32 chars; signs the session cookie                                    |
+| `LOG_LEVEL`                      | no       | pino level; defaults to `info`                                                 |
+| `WALRUS_RECALL_LIMIT`            | no       | recall size; defaults to 10                                                    |
 
 `SIGNAL_PROVIDER_API_URL` and `SIGNAL_PROVIDER_API_KEY` must be set together. When both
 are absent, signal ingestion returns 503 rather than inventing provider data. Startup also
 refuses a `TATUM_SUI_RPC_URL` whose host does not contain the network named by
-`SUI_NETWORK`, and an `AGENT_SUI_ADDRESS` that does not match the key derived from
-`X402_CLIENT_PRIVATE_KEY`.
+`SUI_NETWORK`, and — when `X402_CLIENT_PRIVATE_KEY` is present — an `AGENT_SUI_ADDRESS`
+that does not match that key.
 
 ### Signal provider contract
 
@@ -199,7 +199,6 @@ API:
 | `POST /api/picks/[id]/resolve`             | owner only; source URL + timestamp required              |
 | `POST /api/recommendations`                | recall before deciding; persists citations               |
 | `GET /api/signals/[id]`                    | x402 paywall; Tatum verification before release          |
-| `POST /api/payments/purchase`              | buyer agent pays and re-verifies                         |
 | `POST /api/payments/verify`                | read-only Tatum check; reports `recorded`, never inserts |
 | `GET /api/payments`                        | ledger + Tatum balance/events                            |
 | `GET /api/health`                          | database + Walrus + Tatum checks, no secrets             |
@@ -217,7 +216,7 @@ pnpm verify:memory
 # Requires TATUM_* and TATUM_VERIFY_DIGEST.
 pnpm verify:tatum
 
-# Requires the app running at APP_BASE_URL plus a real signal id and buyer wallet.
+# Requires the app running at APP_BASE_URL, a real signal id, and X402_CLIENT_PRIVATE_KEY.
 pnpm verify:x402
 ```
 

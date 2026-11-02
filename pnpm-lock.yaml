@@ -11,6 +11,9 @@ importers:
       '@mysten-incubation/memwal':
         specifier: ^0.1.11
         version: 0.1.11(@mysten/seal@1.5.2(@mysten/sui@2.38.0(typescript@5.9.3)))(@mysten/sui@2.38.0(typescript@5.9.3))(@mysten/walrus@1.2.37(@mysten/sui@2.38.0(typescript@5.9.3)))(zod@4.6.7)
+      '@mysten/dapp-kit-react':
+        specifier: ^2.1.43
+        version: 2.1.43(@mysten/sui@2.38.0(typescript@5.9.3))(@types/react@19.3.0)(react@19.3.1)(typescript@5.9.3)
       '@mysten/seal':
         specifier: 1.5.2
         version: 1.5.2(@mysten/sui@2.38.0(typescript@5.9.3))
@@ -771,6 +774,15 @@ packages:
   '@evanhahn/lottie-web-light@5.8.1':
     resolution: {integrity: sha512-U0G1tt3/UEYnyCNNslWPi1dB7X1xQ9aoSip+B3GTKO/Bns8yz/p39vBkRSN9d25nkbHuCsbjky2coQftj5YVKw==}
 
+  '@floating-ui/core@1.8.0':
+    resolution: {integrity: sha512-0CIZ5itps/8x7BG8dEIhs53BvCUH2PCoogtakwRTut+Arm58sJooJ0AuZhLw2HJYIR5cMLNPBSS728sPho2khQ==}
+
+  '@floating-ui/dom@1.8.0':
+    resolution: {integrity: sha512-yXSrzeHZBTZadLOlfyhCkJHNeLJnHRnRInwdZ40L7ZiaAtrBwoYlsDrX3v5zB1Utk7CLfzcOVnVVWoXEky7Ceg==}
+
+  '@floating-ui/utils@0.2.12':
+    resolution: {integrity: sha512-HpCo8tmWzLVad5s2d19EhAz5zqrrQ6s69qd6moPMQvkOuSwDT1YgRfWSVuc4ennqrgv3OHppiOGMQ7oC13yIww==}
+
   '@gemini-wallet/core@0.2.0':
     resolution: {integrity: sha512-vv9aozWnKrrPWQ3vIFcWk7yta4hQW1Ie0fsNNPeXnjAxkbXr2hqMagEptLuMxpEP2W3mnRu05VDNKzcvAuuZDw==}
     peerDependencies:
@@ -1007,11 +1019,22 @@ packages:
   '@likecoin/qr-code-styling@1.6.6':
     resolution: {integrity: sha512-RbGK/+20bJhFZR70r8MeDvfyz3W7U5zXpykSTYOYxZGyo6wC+Y4QnbUpL+YdAtzT2ZIFeCNOcRs2W2FNrKPoaA==}
 
+  '@lit-labs/scoped-registry-mixin@1.0.4':
+    resolution: {integrity: sha512-gYeotwRwluD7RsFgU0eP48WgBMg6fIF5RXzbrjs/gwsPiJiFtal90s+x/LHIHqQ2VkubsyP+m+QAfgmOnsNhUg==}
+
   '@lit-labs/ssr-dom-shim@1.6.0':
     resolution: {integrity: sha512-VHb0ALPMTlgKjM6yIxxoQNnpKyUKLD04VzeQdsiXkMqkvYlAHxq9glGLmgbb889/1GsohSOAjvQYoiBppXFqrQ==}
 
+  '@lit/react@1.0.8':
+    resolution: {integrity: sha512-p2+YcF+JE67SRX3mMlJ1TKCSTsgyOVdAwd/nxp3NuV1+Cb6MWALbN6nT7Ld4tpmYofcE5kcaSY1YBB9erY+6fw==}
+    peerDependencies:
+      '@types/react': 17 || 18 || 19
+
   '@lit/reactive-element@2.1.2':
     resolution: {integrity: sha512-pbCDiVMnne1lYUIaYNN5wrwQXDtHaYtg7YEFPeW+hws6U47WeFvISGUWekPGKWOP1ygrs0ef0o1VJMk1exos5A==}
+
+  '@lit/task@1.0.3':
+    resolution: {integrity: sha512-1gJGJl8WON+2j0y9xfcD+XsS1rvcy3XDgsIhcdUW++yTR8ESjZW6o7dn8M8a4SZM8NnJe6ynS2cKWwsbfLOurg==}
 
   '@metamask/eth-json-rpc-provider@1.0.1':
     resolution: {integrity: sha512-whiUMPlAOrVGmX8aKYVPvlKyG4CpQXiNNyt74vE1xb5sPvmx5oA7B/kOi/JdBvhGQq97U1/AVdXEdk2zkP8qyA==}
@@ -1125,8 +1148,24 @@ packages:
   '@mysten/bcs@2.1.3':
     resolution: {integrity: sha512-sg3hstwDLQQmQTpiX8Vzs13bEEGTqnhp1gUzBLlVQ493xyTTCDwB/jXGzT0g2I/GXd2o1B3s7Bd67Ua3VZo+Jw==}
 
+  '@mysten/dapp-kit-core@1.6.41':
+    resolution: {integrity: sha512-V1RN35SLYi0kcdo8EiatobO/19U9JBMLjf2cLXrH/rmm5K50qc9w9Tw0WwnHaAP5iBrUDeq7o1vEtMIHDrpQLA==}
+    peerDependencies:
+      '@mysten/sui': ^2.38.0
+
+  '@mysten/dapp-kit-react@2.1.43':
+    resolution: {integrity: sha512-j+TKy+UvJxsb5SiSyUUGUCNAxTjIUHYqRtuMOiiZMLK+XNvKxWpGmncPnKQd/QpcbkAVugQIRs1UEB8JYO8U9g==}
+    peerDependencies:
+      '@types/react': '>=17.0.0'
+      react: '>=17.0.0'
+
   '@mysten/seal@1.5.2':
     resolution: {integrity: sha512-8pbihzdkAYt8r+G9sewkrfqLZ/aAObJnKUDxcDYVJXAvZrL2GOaM8tQBMdN8zzIQ9Mw3oc3j8LmdccjmPi+Erw==}
+    peerDependencies:
+      '@mysten/sui': ^2.38.0
+
+  '@mysten/slush-wallet@1.3.6':
+    resolution: {integrity: sha512-qseBI9ZPKiGpPSNCpUL3wjtN48EVcLIqQko4Jkfk5RnQZjeSCfn56+y4SKQffcB2OsxzH/y1tDSbrnIXU0jhWw==}
     peerDependencies:
       '@mysten/sui': ^2.38.0
 
@@ -1137,6 +1176,11 @@ packages:
   '@mysten/utils@0.4.2':
     resolution: {integrity: sha512-K/5eBuYKxUFCrYcic1lvYvWE9OVSH581cjVjwsSJGUqPit91nZq2acUwes+B4lo98VE/CILIUeBcyEIvuNxMhA==}
 
+  '@mysten/wallet-standard@0.21.36':
+    resolution: {integrity: sha512-cPD/aIqImc8n39ejvzd5jCskTMHB0PRstVE2p/Tfn+Jh62YQhrPndXVprRsAmJgS+6U0uJWHUec9wxQDXJ85Jg==}
+    peerDependencies:
+      '@mysten/sui': ^2.38.0
+
   '@mysten/walrus-wasm@0.3.1':
     resolution: {integrity: sha512-d+6M4xuZnkhOmLCinpe8F21pxpZ9QDZzw/QWXa9R1h0DM2iqfovfhLeT4ZaUj1pbp5mQ5C/3LJtfppjKhvynig==}
 
@@ -1144,6 +1188,22 @@ packages:
     resolution: {integrity: sha512-NS/kmctPqz0DJFmxIh1GHrz32AvhcK/3yPlkTT9Nzuk/TpKwaXSPi2FEI4xiGk93WRVt9HO9Qg+ifIGcoNTmWA==}
     peerDependencies:
       '@mysten/sui': ^2.38.0
+
+  '@mysten/window-wallet-core@0.4.1':
+    resolution: {integrity: sha512-0593Dt8q0VWXZBcRziksedxXncuFO7NCRZhxwDAnMGSpghZLeRw3qA2zX5eE8QQ1g+SR87X7Z8tu5TVzzw73Mw==}
+
+  '@nanostores/lit@0.2.3':
+    resolution: {integrity: sha512-hIUKzdNrgKXkXCsppzQxmYYYMTn96cncijWhzcYZKn3Yimqj7B6YK94qN/KObjBNEe0xR3JLgMo96ew5fVtW2w==}
+    peerDependencies:
+      lit: ^2.6.0 || ^3.0.0
+      nanostores: '>=0.7 < 1.0.0 || ^1.0.0'
+
+  '@nanostores/react@1.1.0':
+    resolution: {integrity: sha512-MbH35fjhcf7LAubYX5vhOChYUfTLzNLqH/mBGLVsHkcvjy0F8crO1WQwdmQ2xKbAmtpalDa2zBt3Hlg5kqr8iw==}
+    engines: {node: ^20.0.0 || >=22.0.0}
+    peerDependencies:
+      nanostores: ^1.2.0
+      react: '>=18.0.0'
 
   '@napi-rs/wasm-runtime@1.2.6':
     resolution: {integrity: sha512-mRyDmEw9/fCDXCGfL1sbgIw/GUK0PVxRW4YwgPN61F3LQ+fSyoBFarJVzgGyhF6kRzEQZ0FejDqm4WLXSeqQmw==}
@@ -2888,8 +2948,41 @@ packages:
     resolution: {integrity: sha512-gggIHTtxicF9XFMQ12DkfS6NAG92Ak795JeSA7f2whAQ6Y3AkMWWuCMxSZXG2NIPN42kEaZSNVjqMsJRaJRxMQ==}
     engines: {node: '>=22'}
 
+  '@wallet-standard/core@1.1.2':
+    resolution: {integrity: sha512-QcVLGDkFtsWjTpkej2jx4FyP2cu+qOAW/lVnvlWjyhCkSEje6z+vEKURV5v+7L6IXjbze5pyFBe24yrPyoUuyw==}
+    engines: {node: '>=22'}
+
+  '@wallet-standard/errors@0.1.2':
+    resolution: {integrity: sha512-oEzKUqJefKby6wcIvaJgrSEe/uNn/rnqkJ0P/85K+h0i5Tdo9E3L22VWq/j5K1e8hHMnZd6LgaIr8m/Wn7X/Ng==}
+    engines: {node: '>=22'}
+    hasBin: true
+
   '@wallet-standard/features@1.1.1':
     resolution: {integrity: sha512-aCWYmVeSCGViyEU5k7GMoW8zxE4Gs+C1s1Pp2XLesvSNlnZ4PMES9HUnTB3hl0b3RVj7C61yze3IWyrncqg4MA==}
+    engines: {node: '>=22'}
+
+  '@wallet-standard/ui-compare@1.0.3':
+    resolution: {integrity: sha512-AXst7auT0+5eIaj8MyUXZLopKWN2HwqiQNTVgcF80u9X9a/fsiiHi8tlY0dc/y/AIOM654cMpvpJqsJEZNV9pg==}
+    engines: {node: '>=22'}
+
+  '@wallet-standard/ui-core@1.0.1':
+    resolution: {integrity: sha512-LFmsSjMw3wXfZgZ5eAFGdIJ1512dGTWIEeoPDKsc6mHf7cMU18tvtpe4bOL76lT9Qh1Gc+4+kdtwSkTuJ9L+jw==}
+    engines: {node: '>=22'}
+
+  '@wallet-standard/ui-features@1.0.3':
+    resolution: {integrity: sha512-3YgxBoDXZCsaSyCNMph7i7G57ap+C6Y+l3HmTEQKigzTGxPUJ2mvqpTPwdj8D2cVkTKBzu8/78wweV7I9eG1rA==}
+    engines: {node: '>=22'}
+
+  '@wallet-standard/ui-registry@1.1.1':
+    resolution: {integrity: sha512-vJDZ/K2xwIqkxiyWUhPb6s62bTMRbYPj0MCJa9lYsqHGZgMbKBI3ZjLJK5MzWow2VxoOfuR77HuJng+HDWt1hA==}
+    engines: {node: '>=22'}
+
+  '@wallet-standard/ui@1.0.3':
+    resolution: {integrity: sha512-H2QJTR5m3PeHi06q8kj4TiRf3U+fEe6W+jw+hztPkjTRBVDeCIrwRhbdgAyI8yaGc7dBhzGYqhUQ9ecYj7x0rQ==}
+    engines: {node: '>=22'}
+
+  '@wallet-standard/wallet@1.1.1':
+    resolution: {integrity: sha512-8WiRPaKk/wNNRZhB2eVhpR/JW7/aqTCMoZhgVUCujuzDmxxmGvsosMxdCG4NAdYkoyozAHCX8/xLtlWUn5mNdQ==}
     engines: {node: '>=22'}
 
   '@walletconnect/browser-utils@1.8.0':
@@ -3041,6 +3134,9 @@ packages:
 
   '@walletconnect/window-metadata@1.0.1':
     resolution: {integrity: sha512-9koTqyGrM2cqFRW517BPY/iEtUDx2r1+Pwwu5m7sJ7ka79wi3EyqhqcICk/yDmv6jAS1rjKgTKXlEhanYjijcA==}
+
+  '@webcomponents/scoped-custom-element-registry@0.0.10':
+    resolution: {integrity: sha512-wP4LF28aysE2Pq3NQRNQxko7Q0vOOwcoOSMg8FFI4S6z76UuXkYIc5ndC31dJMwso1/vSteL75LW2CEKedAJbA==}
 
   '@x402/core@2.12.0':
     resolution: {integrity: sha512-dLae9AbZRN/W7GsKe9ngqGsflnP+esE72s0GjmqDZbPihM/tlHCA6UnDdgM0qfOiDOf9iL+mmCs1OyLWpwnGLQ==}
@@ -3370,6 +3466,10 @@ packages:
   combined-stream@1.0.8:
     resolution: {integrity: sha512-FQN4MRfuJeHf7cBbBMJFXhKSDq+2kAArBlmRBvcvFE5BB1HZKXtSFASDhdlz9zOYwxh8lDdnvmMOe/+5cdoEdg==}
     engines: {node: '>= 0.8'}
+
+  commander@13.1.0:
+    resolution: {integrity: sha512-/rFeCpNJQbhSZjGVwO9RFV3xPqbnERS8MmIQzCtD/zl6gpJuV/bMLuN92oG3F7d8oDEHHRrujSXNUr8fpjntKw==}
+    engines: {node: '>=18'}
 
   commander@14.0.2:
     resolution: {integrity: sha512-TywoWNNRbhoD0BXs1P3ZEScW8W5iKrnbithIl0YH+uCmBd0QpPOA8yc82DS3BIE5Ma6FnBVUsJ7wVUDz4dvOWQ==}
@@ -4534,6 +4634,9 @@ packages:
   lit@3.3.0:
     resolution: {integrity: sha512-DGVsqsOIHBww2DqnuZzW7QsuCdahp50ojuDaBPC7jUDRpYoH0z7kHBBYZewRzer75FwtrkmkKk7iOAwSaWdBmw==}
 
+  lit@3.3.3:
+    resolution: {integrity: sha512-fycuvZg/hkpozL00lm1pEJH5nN/lr9ZXd6mJI2HSN4+Bzc+LDNdEApJ6HFbPkdFNHLvOplIIuJvxkS4XUxqirw==}
+
   locate-path@5.0.0:
     resolution: {integrity: sha512-t7hw9pI+WvuwNJXwk5zVHpyhIqzg2qTlklJOf0mVxGSbe3Fp2VieZcduNYjaLDoy6p9uGpQEGWG87WpMKlNq8g==}
     engines: {node: '>=8'}
@@ -4629,6 +4732,10 @@ packages:
     resolution: {integrity: sha512-uKdg2G3GNCKQn9byYOpxbGqrT2fGO5KRt5J/8b3pok8rT6qxGWF6hxMyJiEYtAf+FVyYuD9hRaDqX5uPFYJ4ZQ==}
     engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
     hasBin: true
+
+  nanostores@1.5.5:
+    resolution: {integrity: sha512-FixtE239Gl6Gz0ZGCK0WzvNwObNCIwVT+L7zQcf1QgcA6AzBxblzqe9OT88qiucNkhsjSOqiogSaF5jVbJiqSA==}
+    engines: {node: ^20.0.0 || >=22.0.0}
 
   napi-postinstall@0.3.7:
     resolution: {integrity: sha512-jyU4cU4kVAmy/3qjP+DcoQTNXfINHc+dFw54gGqWC8nu0mpV0kOnk7kff+J+Q18SbX0k3Np8Rm7yFjd3phatNQ==}
@@ -6549,6 +6656,17 @@ snapshots:
 
   '@evanhahn/lottie-web-light@5.8.1': {}
 
+  '@floating-ui/core@1.8.0':
+    dependencies:
+      '@floating-ui/utils': 0.2.12
+
+  '@floating-ui/dom@1.8.0':
+    dependencies:
+      '@floating-ui/core': 1.8.0
+      '@floating-ui/utils': 0.2.12
+
+  '@floating-ui/utils@0.2.12': {}
+
   '@gemini-wallet/core@0.2.0(viem@2.57.12(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.6.7))':
     dependencies:
       '@metamask/rpc-errors': 7.0.2
@@ -6728,11 +6846,24 @@ snapshots:
     dependencies:
       qrcode-generator: 1.5.2
 
+  '@lit-labs/scoped-registry-mixin@1.0.4':
+    dependencies:
+      '@lit/reactive-element': 2.1.2
+      lit: 3.3.3
+
   '@lit-labs/ssr-dom-shim@1.6.0': {}
+
+  '@lit/react@1.0.8(@types/react@19.3.0)':
+    dependencies:
+      '@types/react': 19.3.0
 
   '@lit/reactive-element@2.1.2':
     dependencies:
       '@lit-labs/ssr-dom-shim': 1.6.0
+
+  '@lit/task@1.0.3':
+    dependencies:
+      '@lit/reactive-element': 2.1.2
 
   '@metamask/eth-json-rpc-provider@1.0.1':
     dependencies:
@@ -6942,12 +7073,52 @@ snapshots:
       '@mysten/utils': 0.4.2
       '@scure/base': 2.4.0
 
+  '@mysten/dapp-kit-core@1.6.41(@mysten/sui@2.38.0(typescript@5.9.3))(typescript@5.9.3)':
+    dependencies:
+      '@floating-ui/dom': 1.8.0
+      '@lit-labs/scoped-registry-mixin': 1.0.4
+      '@lit/task': 1.0.3
+      '@mysten/slush-wallet': 1.3.6(@mysten/sui@2.38.0(typescript@5.9.3))(typescript@5.9.3)
+      '@mysten/sui': 2.38.0(typescript@5.9.3)
+      '@mysten/utils': 0.4.2
+      '@mysten/wallet-standard': 0.21.36(@mysten/sui@2.38.0(typescript@5.9.3))
+      '@nanostores/lit': 0.2.3(lit@3.3.3)(nanostores@1.5.5)
+      '@wallet-standard/ui': 1.0.3
+      '@wallet-standard/ui-registry': 1.1.1
+      '@webcomponents/scoped-custom-element-registry': 0.0.10
+      lit: 3.3.3
+      nanostores: 1.5.5
+    transitivePeerDependencies:
+      - typescript
+
+  '@mysten/dapp-kit-react@2.1.43(@mysten/sui@2.38.0(typescript@5.9.3))(@types/react@19.3.0)(react@19.3.1)(typescript@5.9.3)':
+    dependencies:
+      '@lit/react': 1.0.8(@types/react@19.3.0)
+      '@mysten/dapp-kit-core': 1.6.41(@mysten/sui@2.38.0(typescript@5.9.3))(typescript@5.9.3)
+      '@nanostores/react': 1.1.0(nanostores@1.5.5)(react@19.3.1)
+      '@types/react': 19.3.0
+      nanostores: 1.5.5
+      react: 19.3.1
+    transitivePeerDependencies:
+      - '@mysten/sui'
+      - typescript
+
   '@mysten/seal@1.5.2(@mysten/sui@2.38.0(typescript@5.9.3))':
     dependencies:
       '@mysten/bcs': 2.1.3
       '@mysten/sui': 2.38.0(typescript@5.9.3)
       '@noble/curves': 2.4.0
       '@noble/hashes': 2.4.0
+
+  '@mysten/slush-wallet@1.3.6(@mysten/sui@2.38.0(typescript@5.9.3))(typescript@5.9.3)':
+    dependencies:
+      '@mysten/sui': 2.38.0(typescript@5.9.3)
+      '@mysten/utils': 0.4.2
+      '@mysten/wallet-standard': 0.21.36(@mysten/sui@2.38.0(typescript@5.9.3))
+      '@mysten/window-wallet-core': 0.4.1(typescript@5.9.3)
+      valibot: 1.5.0(typescript@5.9.3)
+    transitivePeerDependencies:
+      - typescript
 
   '@mysten/sui@2.38.0(typescript@5.9.3)':
     dependencies:
@@ -6974,6 +7145,11 @@ snapshots:
 
   '@mysten/utils@0.4.2': {}
 
+  '@mysten/wallet-standard@0.21.36(@mysten/sui@2.38.0(typescript@5.9.3))':
+    dependencies:
+      '@mysten/sui': 2.38.0(typescript@5.9.3)
+      '@wallet-standard/core': 1.1.2
+
   '@mysten/walrus-wasm@0.3.1': {}
 
   '@mysten/walrus@1.2.37(@mysten/sui@2.38.0(typescript@5.9.3))':
@@ -6983,6 +7159,24 @@ snapshots:
       '@mysten/utils': 0.4.2
       '@mysten/walrus-wasm': 0.3.1
       dataloader: 2.2.3
+
+  '@mysten/window-wallet-core@0.4.1(typescript@5.9.3)':
+    dependencies:
+      '@mysten/utils': 0.4.2
+      jose: 6.2.13
+      valibot: 1.5.0(typescript@5.9.3)
+    transitivePeerDependencies:
+      - typescript
+
+  '@nanostores/lit@0.2.3(lit@3.3.3)(nanostores@1.5.5)':
+    dependencies:
+      lit: 3.3.3
+      nanostores: 1.5.5
+
+  '@nanostores/react@1.1.0(nanostores@1.5.5)(react@19.3.1)':
+    dependencies:
+      nanostores: 1.5.5
+      react: 19.3.1
 
   '@napi-rs/wasm-runtime@1.2.6(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)':
     dependencies:
@@ -9141,7 +9335,53 @@ snapshots:
 
   '@wallet-standard/base@1.1.1': {}
 
+  '@wallet-standard/core@1.1.2':
+    dependencies:
+      '@wallet-standard/app': 1.1.1
+      '@wallet-standard/base': 1.1.1
+      '@wallet-standard/errors': 0.1.2
+      '@wallet-standard/features': 1.1.1
+      '@wallet-standard/wallet': 1.1.1
+
+  '@wallet-standard/errors@0.1.2':
+    dependencies:
+      chalk: 5.6.2
+      commander: 13.1.0
+
   '@wallet-standard/features@1.1.1':
+    dependencies:
+      '@wallet-standard/base': 1.1.1
+
+  '@wallet-standard/ui-compare@1.0.3':
+    dependencies:
+      '@wallet-standard/base': 1.1.1
+      '@wallet-standard/ui-core': 1.0.1
+      '@wallet-standard/ui-registry': 1.1.1
+
+  '@wallet-standard/ui-core@1.0.1':
+    dependencies:
+      '@wallet-standard/base': 1.1.1
+
+  '@wallet-standard/ui-features@1.0.3':
+    dependencies:
+      '@wallet-standard/base': 1.1.1
+      '@wallet-standard/errors': 0.1.2
+      '@wallet-standard/ui-core': 1.0.1
+      '@wallet-standard/ui-registry': 1.1.1
+
+  '@wallet-standard/ui-registry@1.1.1':
+    dependencies:
+      '@wallet-standard/base': 1.1.1
+      '@wallet-standard/errors': 0.1.2
+      '@wallet-standard/ui-core': 1.0.1
+
+  '@wallet-standard/ui@1.0.3':
+    dependencies:
+      '@wallet-standard/ui-compare': 1.0.3
+      '@wallet-standard/ui-core': 1.0.1
+      '@wallet-standard/ui-features': 1.0.3
+
+  '@wallet-standard/wallet@1.1.1':
     dependencies:
       '@wallet-standard/base': 1.1.1
 
@@ -9921,6 +10161,8 @@ snapshots:
       '@walletconnect/window-getters': 1.0.1
       tslib: 1.14.1
 
+  '@webcomponents/scoped-custom-element-registry@0.0.10': {}
+
   '@x402/core@2.12.0':
     dependencies:
       zod: 3.25.76
@@ -10348,6 +10590,8 @@ snapshots:
   combined-stream@1.0.8:
     dependencies:
       delayed-stream: 1.0.0
+
+  commander@13.1.0: {}
 
   commander@14.0.2: {}
 
@@ -11579,6 +11823,12 @@ snapshots:
       lit-element: 4.2.2
       lit-html: 3.3.3
 
+  lit@3.3.3:
+    dependencies:
+      '@lit/reactive-element': 2.1.2
+      lit-element: 4.2.2
+      lit-html: 3.3.3
+
   locate-path@5.0.0:
     dependencies:
       p-locate: 4.1.0
@@ -11657,6 +11907,8 @@ snapshots:
   multiformats@9.9.0: {}
 
   nanoid@3.3.20: {}
+
+  nanostores@1.5.5: {}
 
   napi-postinstall@0.3.7: {}
 
