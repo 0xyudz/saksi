@@ -55,10 +55,17 @@ environment (and Preview if you want preview deploys to work).
 | `DB_POOL_MAX`                    | `3` on serverless                                           |
 | `LOG_LEVEL`                      | `info`                                                      |
 | `TATUM_VERIFY_DIGEST`            | optional; the recorded mainnet settlement digest            |
+| `OPERATOR_HANDLES`               | optional; comma-separated handles allowed to ingest signals |
 
 Leave `X402_CLIENT_PRIVATE_KEY`, `X402_TEST_SIGNAL_ID` and `SIGNAL_PROVIDER_*` unset in
 production: browser buyers sign with their own wallet, and the demo signal provider runs
 on your machine only.
+
+`OPERATOR_HANDLES` is also optional. Leave it empty and `/api/signals` POST returns 403
+for every journal, which is the safe default for a public demo. If you want the ingest
+path demonstrable, list exactly one handle and create that journal yourself. Setting it
+also reveals the ingest form on `/signals` for everyone, so the gate is enforced in the
+route, not in the UI.
 
 `APP_BASE_URL` is chicken-and-egg on the first deploy. Deploy once, copy the assigned
 domain, set `APP_BASE_URL` to it, then redeploy. A wrong value breaks session `Origin`

@@ -45,8 +45,9 @@ export default async function OnboardingPage() {
         <p className="mono text-muted text-[10px] tracking-[0.18em] uppercase">New journal</p>
         <h2 className="display mt-3 text-3xl">Choose a handle</h2>
         <p className="text-muted mt-2 mb-6 text-xs leading-relaxed">
-          No password, no email, no wallet connection. A local session cookie scopes your journal to
-          your own Walrus Memory namespace.
+          No email, no password, no wallet connection. A local session cookie scopes your journal to
+          your own Walrus Memory namespace, and a one-time recovery code lets you come back after
+          logging out.
         </p>
         <OnboardingForm />
       </div>

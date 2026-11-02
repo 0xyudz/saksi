@@ -4,6 +4,7 @@ import { SignalIngestForm } from "@/components/forms/SignalIngestForm";
 import { EmptyState, PageHeader } from "@/components/ui";
 import { formatDateTime } from "@/lib/format";
 import { formatAtomic } from "@/lib/price";
+import { ingestionEnabled } from "@/server/auth";
 import { listSignals } from "@/server/data/signals";
 
 export const dynamic = "force-dynamic";
@@ -11,6 +12,7 @@ export const metadata = { title: "Signals" };
 
 export default async function SignalsPage() {
   const items = await listSignals();
+  const canIngest = ingestionEnabled();
 
   return (
     <div>
@@ -71,15 +73,25 @@ export default async function SignalsPage() {
               Provider ingestion
             </p>
             <h2 className="display mt-2 text-2xl">Fetch a real signal</h2>
-            <p className="text-muted mt-2 mb-4 text-xs leading-relaxed">
-              Ingestion calls{" "}
-              <span className="mono text-paper">
-                GET {"{SIGNAL_PROVIDER_API_URL}"}/{"{id}"}
-              </span>{" "}
-              with the configured bearer token. The payload is stored only after the provider
-              response validates.
-            </p>
-            <SignalIngestForm />
+            {canIngest ? (
+              <>
+                <p className="text-muted mt-2 mb-4 text-xs leading-relaxed">
+                  Ingestion calls{" "}
+                  <span className="mono text-paper">
+                    GET {"{SIGNAL_PROVIDER_API_URL}"}/{"{id}"}
+                  </span>{" "}
+                  with the configured bearer token. The payload is stored only after the provider
+                  response validates.
+                </p>
+                <SignalIngestForm />
+              </>
+            ) : (
+              <p className="text-muted mt-2 text-xs leading-relaxed">
+                Ingestion is restricted to operator journals. The provider call spends the
+                operator&apos;s paid quota and writes into the shared catalogue, so it is not open
+                to every visitor. The signals below are still purchasable by anyone with a wallet.
+              </p>
+            )}
           </section>
 
           <section className="card p-6">

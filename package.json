@@ -22,7 +22,8 @@
     "verify:memory": "tsx scripts/verify-memory.ts",
     "verify:tatum": "tsx scripts/verify-tatum.ts",
     "verify:x402": "tsx scripts/verify-x402.ts",
-    "demo:provider": "tsx scripts/demo-signal-provider.ts"
+    "demo:provider": "tsx scripts/demo-signal-provider.ts",
+    "recovery:issue": "tsx scripts/issue-recovery-code.ts"
   },
   "dependencies": {
     "@mysten-incubation/memwal": "^0.1.11",

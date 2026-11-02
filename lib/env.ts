@@ -45,6 +45,20 @@ const envSchema = z
 
     SIGNAL_PROVIDER_API_URL: httpUrl.optional(),
     SIGNAL_PROVIDER_API_KEY: nonEmpty.optional(),
+    /**
+     * Comma-separated journal handles allowed to ingest provider signals. Ingest spends the
+     * operator's provider quota and writes to the shared signal catalogue, so it is not a
+     * feature for every visitor. Empty or unset disables ingestion entirely.
+     */
+    OPERATOR_HANDLES: z
+      .string()
+      .default("")
+      .transform((value) =>
+        value
+          .split(",")
+          .map((handle) => handle.trim().toLowerCase())
+          .filter((handle) => handle.length > 0),
+      ),
 
     APP_BASE_URL: httpUrl,
     SESSION_SECRET: z.string().min(32, "SESSION_SECRET must be at least 32 characters"),

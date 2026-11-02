@@ -24,6 +24,11 @@ export const users = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     handle: text("handle").notNull(),
+    /**
+     * scrypt hash of the recovery code shown once at journal creation. Null for journals
+     * created before recovery existed; those cannot be resumed.
+     */
+    recoveryHash: text("recovery_hash"),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
   },
   (table) => [uniqueIndex("users_handle_unique").on(table.handle)],

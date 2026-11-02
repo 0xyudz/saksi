@@ -15,6 +15,13 @@
       "when": 1793209056165,
       "tag": "0001_worried_satana",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793617096601,
+      "tag": "0002_graceful_vindicator",
+      "breakpoints": true
     }
   ]
 }

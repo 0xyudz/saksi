@@ -169,7 +169,7 @@ reproduce it are in the repo:
 - **Walrus Memory** — relayer `0.1.0`, a fresh write returned blob
   `Y-TFsuMq1956BWInd8F26H62S1ohTI8hxT723DMjckE`, recalled at cosine distance
   `0.35874120150280087`.
-- **Memories on mainnet** — 11 rows across `pick_commit`, `pick_reveal`, `outcome`,
+- **Memories on mainnet** — 22 rows across `pick_commit`, `pick_reveal`, `outcome`,
   `preference`, `payment` and `source_roi`.
 - **Tatum** — checkpoint `340802699`; settlement
   `DemaKkYM7Ni4mRJcxbth3e4h3BkkqgKnR1MYPdWhmgjq` verified as `success` with 2 balance

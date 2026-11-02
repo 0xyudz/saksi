@@ -47,15 +47,23 @@ export async function AppNav() {
           {user ? (
             <>
               <span className="mono text-muted hidden text-xs sm:inline">@{user.handle}</span>
-              <LogoutButton />
+              <LogoutButton hasRecovery={user.hasRecovery} />
               <Link href="/picks/new" className="btn btn-primary h-9 px-4 text-xs">
                 Seal a pick
               </Link>
             </>
           ) : (
-            <Link href="/onboarding" className="btn btn-primary h-9 px-4 text-xs">
-              Start journal
-            </Link>
+            <>
+              <Link
+                href="/resume"
+                className="mono text-muted hover:text-paper hidden text-[10px] tracking-[0.12em] uppercase sm:inline"
+              >
+                resume
+              </Link>
+              <Link href="/onboarding" className="btn btn-primary h-9 px-4 text-xs">
+                Start journal
+              </Link>
+            </>
           )}
           <WalletMenu />
         </div>

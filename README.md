@@ -15,9 +15,9 @@ Built for **Total Recall — Tatum × Walrus Memory** (Track 1: Markets & Sports
 | ------------------------------------- | ------------------------------------------------------------------------- |
 | `pnpm typecheck`                      | passes                                                                    |
 | `pnpm lint`                           | passes                                                                    |
-| `pnpm test`                           | 67 tests pass across 11 files                                             |
+| `pnpm test`                           | 77 tests pass across 12 files                                             |
 | `pnpm build`                          | passes (Next.js 16.4.3, Turbopack)                                        |
-| Migrations generated                  | `0000_free_lifeguard.sql`, `0001_worried_satana.sql`                      |
+| Migrations generated                  | `0000`, `0001`, `0002_graceful_vindicator.sql`                            |
 | Migrations applied to a live database | yes — 8 tables on a live Postgres instance                                |
 | Walrus Memory (mainnet relayer)       | verified — `pnpm verify:memory` writes, recalls and lists real blobs      |
 | Tatum GraphQL (`sui:mainnet`)         | verified — `pnpm verify:tatum` reads checkpoint, transaction and balance  |
@@ -52,6 +52,10 @@ also [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md).
 6. **Dashboard** — credibility leaderboard, analyst detail with calibration, memory ledger
    fetched from `listMemories()` (with a truncation flag, not a claimed namespace total),
    payment ledger and signal pages.
+7. **Recoverable journal identity** — a journal is created without email or password and
+   returns a 24-symbol recovery code exactly once. The code is stored as a scrypt hash
+   (`N=16384, r=8, p=1`), compared in constant time, and accepted in any case or grouping.
+   `/resume` restores the session; a wrong handle and a wrong code return the same 401.
 
 ## Quick start
 
@@ -104,6 +108,7 @@ addresses, networks, prices or namespace prefixes are rejected at startup.
 | `X402_TEST_SIGNAL_ID`            | no       | required only by `pnpm verify:x402`                                            |
 | `SIGNAL_PROVIDER_API_URL`        | no       | optional pair with the next value                                              |
 | `SIGNAL_PROVIDER_API_KEY`        | no       | optional pair with the previous value                                          |
+| `OPERATOR_HANDLES`               | no       | comma-separated handles allowed to ingest signals; empty disables ingest       |
 | `APP_BASE_URL`                   | yes      | public base URL used by the app and scripts                                    |
 | `SESSION_SECRET`                 | yes      | at least 32 chars; signs the session cookie                                    |
 | `LOG_LEVEL`                      | no       | pino level; defaults to `info`                                                 |
@@ -111,10 +116,12 @@ addresses, networks, prices or namespace prefixes are rejected at startup.
 | `DB_POOL_MAX`                    | no       | per-instance Postgres pool; defaults to 10, lower it on serverless             |
 
 `SIGNAL_PROVIDER_API_URL` and `SIGNAL_PROVIDER_API_KEY` must be set together. When both
-are absent, signal ingestion returns 503 rather than inventing provider data. Startup also
-refuses a `TATUM_SUI_RPC_URL` whose host does not contain the network named by
-`SUI_NETWORK`, and — when `X402_CLIENT_PRIVATE_KEY` is present — an `AGENT_SUI_ADDRESS`
-that does not match that key.
+are absent, signal ingestion returns 503 rather than inventing provider data. Ingestion is
+additionally gated on `OPERATOR_HANDLES`: a journal that is not listed gets 403, and an
+empty list disables the endpoint entirely, because each ingest spends the operator's paid
+provider quota. Startup also refuses a `TATUM_SUI_RPC_URL` whose host does not contain the
+network named by `SUI_NETWORK`, and — when `X402_CLIENT_PRIVATE_KEY` is present — an
+`AGENT_SUI_ADDRESS` that does not match that key.
 
 ### Signal provider contract
 
@@ -220,7 +227,8 @@ applied** in this workspace because no PostgreSQL runtime was available. Run
 | Route                                 | Purpose                                                                                         |
 | ------------------------------------- | ----------------------------------------------------------------------------------------------- |
 | `/`                                   | dashboard: stats, credibility leaderboard, latest picks, memory decision, Tatum settlement feed |
-| `/onboarding`                         | create a journal identity                                                                       |
+| `/onboarding`                         | create a journal identity; shows the one-time recovery code                                     |
+| `/resume`                             | resume an existing journal with its handle and recovery code                                    |
 | `/picks`, `/picks/new`, `/picks/[id]` | ledger, sealed pick form, proof detail + reveal/resolve                                         |
 | `/analysts`, `/analysts/[id]`         | leaderboard and calibration/evidence                                                            |
 | `/memory`                             | relayer health, fetched `listMemories()` pages, recall with paired citations                    |
@@ -229,17 +237,19 @@ applied** in this workspace because no PostgreSQL runtime was available. Run
 
 API:
 
-| Route                                      | Notes                                                    |
-| ------------------------------------------ | -------------------------------------------------------- |
-| `POST /api/picks`                          | seal a pick; rolls back on memory failure                |
-| `POST /api/picks/[id]/reveal`              | owner only; hash + time-lock checked                     |
-| `POST /api/picks/[id]/resolve`             | owner only; source URL + timestamp required              |
-| `POST /api/recommendations`                | recall before deciding; persists citations               |
-| `GET /api/signals/[id]`                    | x402 paywall; Tatum verification before release          |
-| `POST /api/payments/verify`                | read-only Tatum check; reports `recorded`, never inserts |
-| `GET /api/payments`                        | ledger + Tatum balance/events                            |
-| `GET /api/health`                          | database + Walrus + Tatum checks, no secrets             |
-| `POST /api/session`, `DELETE /api/session` | local journal session                                    |
+| Route                          | Notes                                                    |
+| ------------------------------ | -------------------------------------------------------- |
+| `POST /api/picks`              | seal a pick; rolls back on memory failure                |
+| `POST /api/picks/[id]/reveal`  | owner only; hash + time-lock checked                     |
+| `POST /api/picks/[id]/resolve` | owner only; source URL + timestamp required              |
+| `POST /api/recommendations`    | recall before deciding; persists citations               |
+| `GET /api/signals/[id]`        | x402 paywall; Tatum verification before release          |
+| `POST /api/payments/verify`    | read-only Tatum check; reports `recorded`, never inserts |
+| `GET /api/payments`            | ledger + Tatum balance/events                            |
+| `GET /api/health`              | database + Walrus + Tatum checks, no secrets             |
+| `POST /api/session`            | create a journal; returns the recovery code once         |
+| `PATCH /api/session`           | resume with handle + recovery code; rate limited         |
+| `DELETE /api/session`          | log out (needs the recovery code to come back)           |
 
 ## Verification scripts
 
@@ -281,7 +291,7 @@ Every step is an HTTP call, so it can be re-run against a deployment:
 
 | Step                              | Expected                                                       |
 | --------------------------------- | -------------------------------------------------------------- |
-| `POST /api/session`               | 201, signed session cookie                                     |
+| `POST /api/session`               | 201, signed session cookie, and a 24-symbol recovery code      |
 | `POST /api/analysts`              | 201                                                            |
 | `POST /api/picks`                 | 201 with a commitment hash and a Walrus blob id                |
 | `GET /api/picks/[id]`             | owner sees the selection; an anonymous caller gets it redacted |
@@ -290,6 +300,9 @@ Every step is an HTTP call, so it can be re-run against a deployment:
 | `POST /api/memory/preferences`    | 201 with a blob id                                             |
 | `POST /api/recommendations`       | 201, verdict plus citations that carry blob ids                |
 | `POST /api/signals`               | 201 from the provider; unknown id → 404, provider outage → 502 |
+| `POST /api/signals` as non-op     | 403, then 429 after 10 ingest calls in a minute                |
+| `PATCH /api/session` wrong code   | 401, with the same body as an unknown handle                   |
+| `PATCH /api/session` real code    | 200, and the resumed session still owns its sealed pick        |
 | `GET /api/signals/[id]`           | 402 with a `payment-required` challenge                        |
 | `POST /api/payments/verify`       | 200, `verified: true`, and `recorded` reflects the ledger only |
 | 34 rapid requests to one signal   | 30 × 402 then 429, confirming the per-IP limiter               |
@@ -333,7 +346,7 @@ guessed.
 | Walrus Memory blob ID (sealed pick) | `RruPtIKgN3QZyEmUNOIVqA_yrk8mBylE8Bsg4h9O0NA` (`pick_commit`)                                       | `memory_writes`        |
 | Walrus Memory blob ID (payment)     | `iQkdVACTG5arG58RDCnYr74_dJPeueaeJ9NTGheeBRA` (`payment`)                                           | `memory_writes`        |
 | Walrus Memory blob ID (source ROI)  | `KkHx_aFl4YkIBBGF3bQ4hMMljtdhshUUTVMxhEqbjcE` (`source_roi`)                                        | `memory_writes`        |
-| Mainnet memories written            | 20 rows: `pick_commit` 5, `pick_reveal` 4, `outcome` 4, `preference` 5, `payment` 1, `source_roi` 1 | `memory_writes`        |
+| Mainnet memories written            | 22 rows: `pick_commit` 7, `pick_reveal` 4, `outcome` 4, `preference` 5, `payment` 1, `source_roi` 1 | `memory_writes`        |
 | Tatum checkpoint                    | `340802699`                                                                                         | `pnpm verify:tatum`    |
 | Tatum transaction digest            | `DemaKkYM7Ni4mRJcxbth3e4h3BkkqgKnR1MYPdWhmgjq` — status `success`, 2 balance changes                | `pnpm verify:tatum`    |
 | x402 settlement digest              | `DemaKkYM7Ni4mRJcxbth3e4h3BkkqgKnR1MYPdWhmgjq` — 10000 atomic USDC, `sui:mainnet`                   | browser wallet + Tatum |
@@ -386,5 +399,13 @@ and the relayer returns 9 memories for `saksi_demo` and 2 for `testdemo`.
   add provider-specific authentication, rate limits and response-size limits.
 - Sessions are a local, HMAC-signed cookie containing the user UUID. Signing prevents
   forgery, but this is still a hackathon identity model rather than production
-  authentication (no password, expiry rotation, or revocation list).
+  authentication (no expiry rotation or revocation list).
+- A journal is resumed with its handle plus a 24-symbol recovery code issued once at
+  creation and stored only as a scrypt hash. Losing the code means the journal cannot be
+  recovered: `sealed` picks stay sealed forever. Journals created before this existed can
+  be given a code by an operator with `pnpm recovery:issue <handle> <file>`, which is a CLI
+  rather than an endpoint so nobody can mint a code for someone else's handle.
+- Signal ingestion is restricted to handles listed in `OPERATOR_HANDLES` and rate limited
+  to 10 requests per minute. Buying an ingested signal is still open to anyone with a
+  wallet.
 - The in-memory rate limiter is not shared between server instances.

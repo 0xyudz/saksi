@@ -12,6 +12,11 @@ import { verifySession } from "./session-cookie";
 export interface SessionUser {
   readonly id: string;
   readonly handle: string;
+  /**
+   * False for journals created before recovery codes existed. Those can never be resumed,
+   * so the UI must warn about that instead of pointing at a code that does not exist.
+   */
+  readonly hasRecovery: boolean;
 }
 
 export async function readSessionUserId(): Promise<string | undefined> {
@@ -33,17 +38,17 @@ export async function getSessionUser(): Promise<SessionUser | null> {
 
   const db = getDb();
   const rows = await db
-    .select({ id: users.id, handle: users.handle })
+    .select({ id: users.id, handle: users.handle, recoveryHash: users.recoveryHash })
     .from(users)
     .where(eq(users.id, id))
     .limit(1);
 
-  const user = rows[0];
-  if (!user) {
+  const row = rows[0];
+  if (!row) {
     getLogger().warn({ userId: id }, "session cookie points at a missing user");
     return null;
   }
-  return user;
+  return { id: row.id, handle: row.handle, hasRecovery: row.recoveryHash !== null };
 }
 
 export async function requireSessionUser(): Promise<SessionUser> {
