@@ -333,7 +333,7 @@ guessed.
 | Walrus Memory blob ID (sealed pick) | `RruPtIKgN3QZyEmUNOIVqA_yrk8mBylE8Bsg4h9O0NA` (`pick_commit`)                                       | `memory_writes`        |
 | Walrus Memory blob ID (payment)     | `iQkdVACTG5arG58RDCnYr74_dJPeueaeJ9NTGheeBRA` (`payment`)                                           | `memory_writes`        |
 | Walrus Memory blob ID (source ROI)  | `KkHx_aFl4YkIBBGF3bQ4hMMljtdhshUUTVMxhEqbjcE` (`source_roi`)                                        | `memory_writes`        |
-| Mainnet memories written            | 11 rows: `pick_commit` 2, `pick_reveal` 2, `outcome` 2, `preference` 3, `payment` 1, `source_roi` 1 | `memory_writes`        |
+| Mainnet memories written            | 20 rows: `pick_commit` 5, `pick_reveal` 4, `outcome` 4, `preference` 5, `payment` 1, `source_roi` 1 | `memory_writes`        |
 | Tatum checkpoint                    | `340802699`                                                                                         | `pnpm verify:tatum`    |
 | Tatum transaction digest            | `DemaKkYM7Ni4mRJcxbth3e4h3BkkqgKnR1MYPdWhmgjq` — status `success`, 2 balance changes                | `pnpm verify:tatum`    |
 | x402 settlement digest              | `DemaKkYM7Ni4mRJcxbth3e4h3BkkqgKnR1MYPdWhmgjq` — 10000 atomic USDC, `sui:mainnet`                   | browser wallet + Tatum |
@@ -359,6 +359,11 @@ digest returns the existing row instead of charging twice.
 The signal behind that settlement is served by `scripts/demo-signal-provider.ts` and is
 labelled **synthetic demo payload** everywhere it appears. It exists to exercise the
 paywall, not to claim a real forecast was sold.
+
+Some of those memories came from the end-to-end checks above, whose journals were deleted
+afterwards. Walrus blobs cannot be deleted once written, so the row count is higher than the
+number of surviving journals; `memory_writes` still records the real blob id of every write,
+and the relayer returns 9 memories for `saksi_demo` and 2 for `testdemo`.
 
 ## Known limitations and risks
 
