@@ -147,11 +147,14 @@ Serverless caveats that the local run does not have:
 
 - The rate limiter in `lib/rate-limit.ts` is per-instance memory, so on Vercel it only
   blunts a single instance's traffic. Add an edge or gateway limiter for real protection.
-- `vercel.json` allows a 60s function duration, which covers the ~20s Tatum settlement
-  retry. A shorter platform limit would cut that retry short.
+- Routes that call Walrus or Tatum declare `maxDuration = 60`, which covers the ~20s Tatum
+  settlement retry. A shorter platform limit would cut that retry short.
 - Settlement `resource.url` values recorded before the first deploy point at
   `http://localhost:3000`. They remain valid receipts for those payments, but new
   settlements should be recorded after `APP_BASE_URL` is correct.
+
+A step-by-step checklist with the full variable list lives in
+[docs/DEPLOY.md](docs/DEPLOY.md).
 
 ## Architecture
 
