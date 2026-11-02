@@ -153,6 +153,14 @@ this repository does not implement. Do not silently switch networks.
 Route: `GET /api/signals/[id]`, declared as `GET /api/signals/[id]` with an `exact`
 scheme, `X402_PRICE`, `SUI_NETWORK` and `X402_PAY_TO_ADDRESS`.
 
+`X402_PRICE` accepts a USD string (`$0.01`) or an atomic amount (`10000`). The scheme
+itself only understands USD strings, so the seller normalises through
+`parsePriceToAtomic()` + `formatUsd()` before advertising requirements. The ingest path
+uses the same parser, keeping the advertised amount and the stored `price_atomic` equal.
+Note that Next.js expands a literal `$0` in `.env.local`; use the atomic form there, or
+escape it as `\$0.01` (the app's verification scripts load `.env.local` with plain
+dotenv, which does not expand escapes, so the atomic form is the portable choice).
+
 `integrations/x402/seller.ts` uses:
 
 - `HTTPFacilitatorClient` from `@x402/core/server` pointed at `X402_FACILITATOR_URL`

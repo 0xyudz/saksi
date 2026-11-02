@@ -10,6 +10,7 @@ import { USDC_DECIMALS } from "@/lib/config";
 import { getEnv } from "@/lib/env";
 import { AppError } from "@/lib/errors";
 import { getLogger, errorForLog } from "@/lib/logger";
+import { formatUsd, parsePriceToAtomic } from "@/lib/price";
 
 export const SIGNAL_ROUTE_PATTERN = "GET /api/signals/[id]";
 
@@ -51,7 +52,10 @@ function buildRoutes(): Record<string, RouteConfig> {
       accepts: [
         {
           scheme: "exact",
-          price: env.X402_PRICE,
+          // The x402 scheme always parses `price` as a human USD string. Saksi also
+          // accepts atomic values in `X402_PRICE`, so normalise through the same parser
+          // the ingest path uses; otherwise `10000` would be read as $10,000.
+          price: formatUsd(parsePriceToAtomic(env.X402_PRICE)),
           network: env.SUI_NETWORK,
           payTo: env.X402_PAY_TO_ADDRESS,
         },

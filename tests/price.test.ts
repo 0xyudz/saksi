@@ -39,4 +39,11 @@ describe("formatUsd", () => {
   it("prefixes the amount with a dollar sign", () => {
     expect(formatUsd(2_500_000n)).toBe("$2.5");
   });
+
+  it("normalises either accepted env form for the x402 seller", () => {
+    // `X402_PRICE` may be atomic ("10000") or USD ("$0.01"); the seller must
+    // advertise the same amount for both.
+    expect(formatUsd(parsePriceToAtomic("10000"))).toBe("$0.01");
+    expect(formatUsd(parsePriceToAtomic("$0.01"))).toBe("$0.01");
+  });
 });
