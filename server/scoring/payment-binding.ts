@@ -76,9 +76,13 @@ export function assertSignalPriceMatches(
 }
 
 /**
- * Only recovery-worthy failures may be retried. Validation errors, network mismatches,
- * insufficient payments and `Transaction not found.` are deterministic, so retrying them
- * just delays the error. The RPC marks transport/5xx failures with `retryable`.
+ * Only recovery-worthy failures may be retried. Validation errors, network mismatches and
+ * insufficient payments are deterministic, so retrying them just delays the error.
+ *
+ * `Transaction not found.` is different: Tatum indexes a freshly settled digest with a
+ * short delay, so a missing transaction right after settlement is expected and must be
+ * retried. Without that, a buyer who already paid gets a 402 and never sees the payload.
+ * The RPC marks transport/5xx failures with `retryable` too.
  */
 export function isRetryablePaymentError(error: unknown): boolean {
   if (!(error instanceof AppError)) return false;

@@ -122,13 +122,20 @@ describe("retry classification", () => {
     expect(isRetryablePaymentError(new AppError("UPSTREAM_UNAVAILABLE", "Bad request."))).toBe(
       false,
     );
-    expect(
-      isRetryablePaymentError(new AppError("PAYMENT_NOT_VERIFIED", "Transaction not found.")),
-    ).toBe(false);
     expect(isRetryablePaymentError(new AppError("VALIDATION_FAILED", "Invalid digest."))).toBe(
       false,
     );
     expect(isRetryablePaymentError(new AppError("CONFLICT", "Wrong signal."))).toBe(false);
     expect(isRetryablePaymentError(new Error("socket hang up"))).toBe(false);
+  });
+
+  it("retries a not-yet-indexed settlement so a paid buyer still gets the payload", () => {
+    // Regression: Tatum indexes a freshly settled digest with a short delay. Treating
+    // this as permanent made the seller return 402 after the buyer had already paid.
+    expect(
+      isRetryablePaymentError(
+        new AppError("PAYMENT_NOT_VERIFIED", "Transaction not found.", { retryable: true }),
+      ),
+    ).toBe(true);
   });
 });

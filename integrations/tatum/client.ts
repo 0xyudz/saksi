@@ -364,7 +364,9 @@ export class TatumSuiClient {
     );
     const transaction = first.result.transaction;
     if (!transaction) {
-      throw new AppError("PAYMENT_NOT_VERIFIED", "Transaction not found.");
+      // A freshly settled digest is not indexed yet. This is eventual consistency, not a
+      // permanent failure, so the caller must be allowed to retry with backoff.
+      throw new AppError("PAYMENT_NOT_VERIFIED", "Transaction not found.", { retryable: true });
     }
 
     const effects = transaction.effects;

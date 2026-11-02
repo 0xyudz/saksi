@@ -16,7 +16,15 @@ import {
 } from "@/server/scoring/payment-binding";
 import { getSignal } from "./ingest-signal";
 
-const VERIFY_ATTEMPTS = 4;
+/**
+ * Tatum's indexer lags a freshly settled digest by a few seconds, so the seller has to
+ * wait for it rather than rejecting a buyer who already paid. The budget below covers
+ * roughly 20s of backoff; past that the caller receives the last error and can re-check
+ * the digest through `POST /api/payments/verify` without paying again.
+ */
+const VERIFY_ATTEMPTS = 7;
+const VERIFY_BASE_DELAY_MS = 750;
+const VERIFY_MAX_DELAY_MS = 5_000;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -34,7 +42,7 @@ export async function verifyPaymentWithRetry(
       lastError = error;
       if (!isRetryablePaymentError(error)) throw error;
       if (attempt < VERIFY_ATTEMPTS - 1) {
-        await sleep(500 * 2 ** attempt);
+        await sleep(Math.min(VERIFY_BASE_DELAY_MS * 2 ** attempt, VERIFY_MAX_DELAY_MS));
       }
     }
   }
