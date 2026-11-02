@@ -6,6 +6,8 @@ import { requireApiUserId } from "@/server/auth";
 import { resolvePick, resolvePickSchema } from "@/server/usecases/resolve-pick";
 
 export const dynamic = "force-dynamic";
+/** Walrus recall/write and Tatum verification can exceed the platform default. */
+export const maxDuration = 60;
 
 const idSchema = z.string().uuid();
 

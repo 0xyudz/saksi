@@ -107,6 +107,7 @@ addresses, networks, prices or namespace prefixes are rejected at startup.
 | `SESSION_SECRET`                 | yes      | at least 32 chars; signs the session cookie                                    |
 | `LOG_LEVEL`                      | no       | pino level; defaults to `info`                                                 |
 | `WALRUS_RECALL_LIMIT`            | no       | recall size; defaults to 10                                                    |
+| `DB_POOL_MAX`                    | no       | per-instance Postgres pool; defaults to 10, lower it on serverless             |
 
 `SIGNAL_PROVIDER_API_URL` and `SIGNAL_PROVIDER_API_KEY` must be set together. When both
 are absent, signal ingestion returns 503 rather than inventing provider data. Startup also
@@ -124,6 +125,33 @@ Authorization: Bearer {SIGNAL_PROVIDER_API_KEY}
 ```
 
 Additional fields are allowed; `provider`, `title` and `payload` are required.
+
+## Deploying to Vercel
+
+`vercel.json` pins the function region to `sin1` because the live Postgres instance runs in
+`ap-southeast-1`. Change both together, or every query crosses an ocean.
+
+1. Import the repository in Vercel and set every required variable from the table above.
+   Use the production values, not the local ones.
+2. Set `APP_BASE_URL` to the deployment URL (for example
+   `https://saksi.vercel.app`). It is used for session `Origin` checks and for the x402
+   `resource.url`, so a wrong value breaks purchases.
+3. Set `DB_POOL_MAX=3`. Each serverless instance keeps its own pool, so the local default
+   of 10 multiplies across instances and can exhaust a small Postgres plan. Prefer a
+   pooled connection string from your provider.
+4. Run `pnpm db:migrate` once against the production database. It is not part of the build.
+5. Open `/api/health` after the first deploy; it must report `database`, `walrus` and
+   `tatum` as ok before you demo a purchase.
+
+Serverless caveats that the local run does not have:
+
+- The rate limiter in `lib/rate-limit.ts` is per-instance memory, so on Vercel it only
+  blunts a single instance's traffic. Add an edge or gateway limiter for real protection.
+- `vercel.json` allows a 60s function duration, which covers the ~20s Tatum settlement
+  retry. A shorter platform limit would cut that retry short.
+- Settlement `resource.url` values recorded before the first deploy point at
+  `http://localhost:3000`. They remain valid receipts for those payments, but new
+  settlements should be recorded after `APP_BASE_URL` is correct.
 
 ## Architecture
 

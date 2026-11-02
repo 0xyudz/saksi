@@ -50,6 +50,11 @@ const envSchema = z
     SESSION_SECRET: z.string().min(32, "SESSION_SECRET must be at least 32 characters"),
     LOG_LEVEL: logLevelSchema.default("info"),
     WALRUS_RECALL_LIMIT: z.coerce.number().int().min(1).max(100).default(10),
+    /**
+     * Per-instance Postgres pool. Serverless platforms freeze and clone instances, so the
+     * local default of 10 can exhaust a small Postgres plan; deployments set this lower.
+     */
+    DB_POOL_MAX: z.coerce.number().int().min(1).max(50).default(10),
   })
   .superRefine((value, ctx) => {
     const hasUrl = value.SIGNAL_PROVIDER_API_URL !== undefined;

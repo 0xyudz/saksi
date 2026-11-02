@@ -8,6 +8,8 @@ import { presentPick } from "@/server/presenters/pick";
 import { revealPick } from "@/server/usecases/reveal-pick";
 
 export const dynamic = "force-dynamic";
+/** Walrus recall/write and Tatum verification can exceed the platform default. */
+export const maxDuration = 60;
 
 const idSchema = z.string().uuid();
 

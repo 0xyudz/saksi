@@ -13,6 +13,8 @@ import { presentPick } from "@/server/presenters/pick";
 import { createPick, createPickSchema } from "@/server/usecases/create-pick";
 
 export const dynamic = "force-dynamic";
+/** Walrus recall/write and Tatum verification can exceed the platform default. */
+export const maxDuration = 60;
 
 const listQuerySchema = z.object({
   mine: z.enum(["true", "false"]).optional(),

@@ -5,6 +5,8 @@ import { requireApiUserId } from "@/server/auth";
 import { savePreference } from "@/server/data/memory";
 
 export const dynamic = "force-dynamic";
+/** Walrus recall/write and Tatum verification can exceed the platform default. */
+export const maxDuration = 60;
 
 const preferenceSchema = z.object({
   statement: z.string().trim().min(1).max(400),

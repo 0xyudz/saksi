@@ -4,6 +4,8 @@ import { listRecentPayments } from "@/server/data/lifecycle";
 import { errorForLog, getLogger } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
+/** Walrus recall/write and Tatum verification can exceed the platform default. */
+export const maxDuration = 60;
 
 export async function GET(request: Request): Promise<Response> {
   return handleRoute(request, async ({ requestId }) => {

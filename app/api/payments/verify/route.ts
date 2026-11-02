@@ -12,6 +12,8 @@ import { getSignal } from "@/server/usecases/ingest-signal";
 import { verifyPaymentWithRetry } from "@/server/usecases/purchase-signal";
 
 export const dynamic = "force-dynamic";
+/** Walrus recall/write and Tatum verification can exceed the platform default. */
+export const maxDuration = 60;
 
 const verifySchema = z.object({
   signalId: z.string().uuid(),

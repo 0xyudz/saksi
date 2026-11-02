@@ -4,6 +4,8 @@ import { databaseHealth } from "@/server/data/health";
 import { memoryHealth } from "@/server/data/memory";
 
 export const dynamic = "force-dynamic";
+/** Walrus recall/write and Tatum verification can exceed the platform default. */
+export const maxDuration = 60;
 
 export async function GET(request: Request): Promise<Response> {
   return handleRoute(request, async ({ requestId }) => {

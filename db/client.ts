@@ -14,7 +14,7 @@ export function getDb(): PostgresJsDatabase<typeof schema> {
 
   const env = getEnv();
   sql = postgres(env.DATABASE_URL, {
-    max: 10,
+    max: env.DB_POOL_MAX,
     idle_timeout: 20,
     connect_timeout: 10,
     onnotice: () => undefined,
