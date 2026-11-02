@@ -15,13 +15,14 @@ Built for **Total Recall — Tatum × Walrus Memory** (Track 1: Markets & Sports
 | ------------------------------------- | ------------------------------------------------------------------------- |
 | `pnpm typecheck`                      | passes                                                                    |
 | `pnpm lint`                           | passes                                                                    |
-| `pnpm test`                           | 62 tests pass across 10 files                                             |
+| `pnpm test`                           | 67 tests pass across 11 files                                             |
 | `pnpm build`                          | passes (Next.js 16.4.3, Turbopack)                                        |
 | Migrations generated                  | `0000_free_lifeguard.sql`, `0001_worried_satana.sql`                      |
 | Migrations applied to a live database | yes — 8 tables on a live Postgres instance                                |
 | Walrus Memory (mainnet relayer)       | verified — `pnpm verify:memory` writes, recalls and lists real blobs      |
 | Tatum GraphQL (`sui:mainnet`)         | verified — `pnpm verify:tatum` reads checkpoint, transaction and balance  |
 | x402 on Sui mainnet                   | verified — one real $0.01 USDC settlement, verified by Tatum and recorded |
+| Full user journey                     | verified — seal, reveal, resolve, recommend, ingest and the 402 paywall   |
 | Deployed instance                     | no — the app runs locally at `http://localhost:3000`                      |
 
 Every value in [Proof](#proof) was produced by the command named beside it against Sui
@@ -268,10 +269,31 @@ pnpm test
 ```
 
 Unit tests cover only pure code: canonical JSON and SHA-256, memory build/parse/escaping,
-payment-to-signal binding and retry classification, session-cookie signing, coin type
-normalization, Brier and calibration, credibility decay, bias detection, and price
-conversion. Walrus, Tatum and x402 are deliberately not mocked; they are exercised by the
-scripts above.
+payment-to-signal binding and retry classification, signal-provider status mapping,
+session-cookie signing, coin type normalization, Brier and calibration, credibility decay,
+bias detection, and price conversion. Walrus, Tatum and x402 are deliberately not mocked;
+they are exercised by the scripts above.
+
+### End-to-end checks against a running instance
+
+The journey below was exercised against `pnpm dev` with live Walrus, Tatum and Postgres.
+Every step is an HTTP call, so it can be re-run against a deployment:
+
+| Step                              | Expected                                                       |
+| --------------------------------- | -------------------------------------------------------------- |
+| `POST /api/session`               | 201, signed session cookie                                     |
+| `POST /api/analysts`              | 201                                                            |
+| `POST /api/picks`                 | 201 with a commitment hash and a Walrus blob id                |
+| `GET /api/picks/[id]`             | owner sees the selection; an anonymous caller gets it redacted |
+| `POST /api/picks/[id]/reveal`     | 200, hash re-verified before the selection is exposed          |
+| `POST /api/picks/[id]/resolve`    | 201 with a Brier score and an outcome blob                     |
+| `POST /api/memory/preferences`    | 201 with a blob id                                             |
+| `POST /api/recommendations`       | 201, verdict plus citations that carry blob ids                |
+| `POST /api/signals`               | 201 from the provider; unknown id → 404, provider outage → 502 |
+| `GET /api/signals/[id]`           | 402 with a `payment-required` challenge                        |
+| `POST /api/payments/verify`       | 200, `verified: true`, and `recorded` reflects the ledger only |
+| 34 rapid requests to one signal   | 30 × 402 then 429, confirming the per-IP limiter               |
+| `POST /api/picks` unauthenticated | 401                                                            |
 
 ## Security notes
 
