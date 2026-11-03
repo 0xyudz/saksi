@@ -16,7 +16,7 @@ export default async function AnalystsPage() {
       <PageHeader
         eyebrow="Credibility, not guesses"
         title="Who has earned trust?"
-        description="Scores come only from revealed picks with resolved outcomes. Accuracy is shrunk toward zero for small samples and decayed with a 90-day half-life; calibration keeps lucky longshots from topping the board."
+        description="Scores come only from revealed picks with resolved outcomes. Accuracy is shrunk toward zero for small samples and decayed with a 90-day half-life; calibration keeps lucky longshots from topping the board. The verified score counts only outcomes an independent results provider confirmed."
         actions={
           <Link href="/picks/new" className="btn btn-primary">
             Test an analyst
@@ -52,12 +52,36 @@ export default async function AnalystsPage() {
                           Community-attested
                         </p>
                       ) : null}
+                      {entry.oracleVerifiedSamples > 0 ? (
+                        <p className="mono text-green mt-1 text-[10px] tracking-[0.14em] uppercase">
+                          {entry.oracleVerifiedSamples} oracle verified
+                        </p>
+                      ) : (
+                        <p className="mono text-muted mt-1 text-[10px] tracking-[0.14em] uppercase">
+                          no verified outcomes
+                        </p>
+                      )}
+                      {entry.contradictedSamples > 0 ? (
+                        <p className="mono text-red mt-1 text-[10px] tracking-[0.14em] uppercase">
+                          {entry.contradictedSamples} contradicted
+                        </p>
+                      ) : null}
                     </div>
                   </div>
-                  <div className="grid grid-cols-4 gap-4 text-right sm:w-[340px]">
+                  <div className="grid grid-cols-4 gap-4 text-right sm:w-[380px]">
                     <div>
                       <p className="mono text-green text-lg">{entry.credibility.score}</p>
                       <p className="text-muted text-[10px]">score</p>
+                    </div>
+                    <div>
+                      <p
+                        className={`mono text-lg ${
+                          entry.credibility.hasVerifiedEvidence ? "text-amber" : "text-muted"
+                        }`}
+                      >
+                        {entry.credibility.verifiedScore}
+                      </p>
+                      <p className="text-muted text-[10px]">verified</p>
                     </div>
                     <div>
                       <p className="mono text-lg">{entry.credibility.resolved}</p>
@@ -66,14 +90,6 @@ export default async function AnalystsPage() {
                     <div>
                       <p className="mono text-lg">{formatPercent(entry.credibility.winRate, 0)}</p>
                       <p className="text-muted text-[10px]">win rate</p>
-                    </div>
-                    <div>
-                      <p className="mono text-lg">
-                        {entry.credibility.meanBrier === null
-                          ? "—"
-                          : entry.credibility.meanBrier.toFixed(2)}
-                      </p>
-                      <p className="text-muted text-[10px]">Brier</p>
                     </div>
                   </div>
                 </Link>
@@ -110,6 +126,11 @@ export default async function AnalystsPage() {
               <p>
                 <span className="text-paper">90-day half-life</span> — old streaks decay instead of
                 carrying a career.
+              </p>
+              <p className="border-line border-t pt-3">
+                <span className="text-paper">Verified score</span> — recomputed using only outcomes
+                an independent results provider confirmed. A journal can have a high score and a
+                verified score of zero; that gap is the whole point.
               </p>
             </div>
           </section>

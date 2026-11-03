@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 
 import type { OutcomeResult, PickStatus } from "@/lib/domain";
 import { formatDateTime, shortHash } from "@/lib/format";
+import type { OutcomeVerification } from "@/server/presenters/pick";
 
 export function PageHeader({
   eyebrow,
@@ -77,6 +78,37 @@ const OUTCOME_CLASS: Record<OutcomeResult, string> = {
 
 export function OutcomeBadge({ result }: { readonly result: OutcomeResult }) {
   return <span className={`badge ${OUTCOME_CLASS[result]}`}>{result}</span>;
+}
+
+const VERIFICATION_LABEL: Record<OutcomeVerification, string> = {
+  self_attested: "self-attested",
+  oracle_verified: "oracle verified",
+  oracle_contradicted: "oracle contradicted",
+};
+
+const VERIFICATION_CLASS: Record<OutcomeVerification, string> = {
+  self_attested: "badge-neutral",
+  oracle_verified: "badge-success",
+  oracle_contradicted: "badge-loss",
+};
+
+/**
+ * Shows how much trust an outcome has earned.
+ *
+ * This badge exists because a resolved pick proves only that the owner wrote something down
+ * — it does not prove the result is true. `oracle verified` means an independent provider
+ * agreed; `self-attested` means nobody checked.
+ */
+export function VerificationBadge({
+  verification,
+}: {
+  readonly verification: OutcomeVerification;
+}) {
+  return (
+    <span className={`badge ${VERIFICATION_CLASS[verification]}`}>
+      {VERIFICATION_LABEL[verification]}
+    </span>
+  );
 }
 
 export function EmptyState({

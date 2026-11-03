@@ -89,6 +89,45 @@ memory write does not invalidate the on-chain payment, and the error is logged.
 The `memory_writes` table is an operator audit trail. It is not used as a substitute for
 `listMemories()` on `/memory`.
 
+## Independent result oracle
+
+`integrations/oracle/results.ts` reads final scores from a provider Saksi does not control,
+because every score in Saksi's own database is written by the journal that made the pick.
+Without it, a seller could mark all ten of their picks as wins and the credibility model
+would believe them.
+
+- Source: `GET {ORACLE_ESPN_BASE_URL}/soccer/{league}/scoreboard?dates=YYYYMMDD` and
+  `/summary?event=<id>`.
+- Scope: one league (`eng.1`) and match-winner markets only. Selections are parsed from
+  `"<Team> to win"` and `"draw"`; anything else returns `null` and the outcome falls back to
+  `self_attested`. A half-implemented oracle that silently passed on every other market
+  would look like verification while verifying nothing.
+- The reference (`espn:eng.1:<fixture id>`) is fixed at seal time and stored on the pick.
+  Resolution reads that exact fixture, so a picker cannot shop for whichever match makes
+  them look right after the fact.
+- Team names are normalised (`FC`, `AFC`, `United`, `Utd` stripped) and compared by
+  containment plus shared significant tokens. A name that matches neither side raises an
+  error rather than guessing a result.
+
+Resolution outcomes:
+
+| Provider state                  | Stored `verification` | Counts toward verified score |
+| ------------------------------- | --------------------- | ---------------------------- |
+| Agrees with the claim           | `oracle_verified`     | yes                          |
+| Disagrees with the claim        | `oracle_contradicted` | no                           |
+| No fixture linked / unparseable | `self_attested`       | no                           |
+| Fixture not finished            | `self_attested`       | no                           |
+| Provider unreachable            | `self_attested`       | no                           |
+
+A contradiction never overwrites the owner's claim: `outcomes.result` keeps what they said
+and `oracleResult` keeps what the provider recorded, alongside `oracleSource`,
+`oracleEventId`, `oracleNote` and `verifiedAt`. The credibility model reads `verification`,
+which is what makes the distinction enforceable rather than cosmetic.
+
+`pnpm verify:oracle [date]` is a read-only check: it fetches a scoreboard, reads every
+completed fixture back through the resolver's own code, and fails if any match does not
+resolve to exactly one winner.
+
 ## Tatum Sui GraphQL
 
 Tatum's Sui gateway no longer serves JSON-RPC (`sui_getTransactionBlock`,
@@ -151,16 +190,24 @@ this repository does not implement. Do not silently switch networks.
 
 ### Seller
 
-Route: `GET /api/signals/[id]`, declared as `GET /api/signals/[id]` with an `exact`
-scheme, `X402_PRICE`, `SUI_NETWORK` and `X402_PAY_TO_ADDRESS`.
+Two paywalled routes, both `exact` scheme on `SUI_NETWORK`:
 
-`X402_PRICE` accepts a USD string (`$0.01`) or an atomic amount (`10000`). The scheme
-itself only understands USD strings, so the seller normalises through
-`parsePriceToAtomic()` + `formatUsd()` before advertising requirements. The ingest path
-uses the same parser, keeping the advertised amount and the stored `price_atomic` equal.
-Note that Next.js expands a literal `$0` in `.env.local`; use the atomic form there, or
-escape it as `\$0.01` (the app's verification scripts load `.env.local` with plain
-dotenv, which does not expand escapes, so the atomic form is the portable choice).
+| Route                   | Price                  | Recipient                                |
+| ----------------------- | ---------------------- | ---------------------------------------- |
+| `GET /api/signals/[id]` | the seller's own price | the seller's proven wallet (per-request) |
+| `POST /api/signals`     | `X402_LISTING_FEE`     | `X402_PAY_TO_ADDRESS` (the platform)     |
+
+The purchase route resolves `price` and `payTo` from the signal row on every request, so a
+seller-set price cannot drift from what the challenge advertises and what Tatum later
+verifies. A catalogue row with no seller falls back to the platform address; the handler
+rejects an unlisted id before any settlement is attempted.
+
+`X402_PRICE` and `X402_LISTING_FEE` accept a USD string (`$0.01`) or an atomic amount
+(`10000`). The scheme itself only understands USD strings, so the seller normalises through
+`parsePriceToAtomic()` + `formatUsd()` before advertising requirements. Note that Next.js
+expands a literal `$0` in `.env.local`; use the atomic form there, or escape it as `\$0.01`
+(the verification scripts load `.env.local` with plain dotenv, which does not expand
+escapes, so the atomic form is the portable choice).
 
 `integrations/x402/seller.ts` uses:
 
@@ -182,14 +229,37 @@ Flow:
 
 ```txt
 client GET /api/signals/:id
-  -> no payment header: 402 + accepts
+  -> no payment header: 402 + accepts (recipient = seller wallet)
   -> x402 client signs exact Sui payment
   -> seller verifies + settles through the facilitator
   -> seller receives digest
   -> seller verifies digest through Tatum
-  -> only then returns the provider payload
+  -> only then returns the seller's payload
   -> seller records the settlement (userId nullable)
 ```
+
+### Why the platform fee is a listing fee
+
+Saksi charges a flat fee to publish, not a percentage of a sale. This was settled
+empirically on mainnet, not chosen for convenience:
+
+- The facilitator's `findSendFundsCommand` returns `null` when a transaction contains more
+  than one `send_funds` command, and the settlement is rejected as `invalid_transaction`.
+  Splitting one payment into a seller share and a platform share therefore fails outright.
+- Sui's gasless whitelist rejects `coin::from_balance`, `coin::take`, `TransferObjects` and
+  `public_transfer` with `Feature is not supported: Function 0x2::coin::… is not supported
+in gasless transactions`. Only `balance::send_funds` and `balance::redeem_funds` are
+  permitted, so a fee cannot be carved out of the buyer's transfer.
+- `MAINNET_GASLESS_TOKEN_RULES[USDC].minAmount` is `10000n`. A 9500-atomic transfer fails
+  with `InsufficientGas`, and two `send_funds` of 9500 + 500 fail the same way; two of
+  10000 + 10000 simulate successfully but the facilitator still rejects the transaction.
+- Gasless transactions must carry a `ValidDuring` expiration of at most two epochs, or the
+  build fails with `Invalid transaction expiration`.
+
+Charging the seller separately keeps both payments honest: the listing fee is one `exact`
+settlement to the platform, and the sale is one `exact` settlement to the seller. Saksi
+never holds either. `signals.listing_fee_digest` is unique, so one fee publishes exactly one
+listing and cannot be replayed.
 
 The seller records a purchase already attributed when the paid request carries a journal
 session (`userId` + optional `pickId`). A script-only purchase leaves `userId` null; that
@@ -234,7 +304,10 @@ receipt for the wrong network and never invents a missing digest.
    pick is sealed. Only the owner sees them.
 6. Reveal recomputes the hash and refuses on mismatch. Time locks are enforced.
 7. Resolution requires a revealed pick and stores `result`, `sourceUrl`, `resolvedAt`,
-   optional `payoutUnits`, and the Brier score.
+   optional `payoutUnits`, and the Brier score. When the pick carries an `oracleEventRef`,
+   the independent provider is consulted first and `verification` records whether it agreed
+   (`oracle_verified`), disagreed (`oracle_contradicted`) or could not be reached
+   (`self_attested`, with `oracleNote` explaining why).
 8. Outcome, bias and source-ROI memories are written; the recommendation flow recalls them
    before the next pick and cites text plus distance.
 
@@ -243,37 +316,49 @@ receipt for the wrong network and never invents a missing digest.
 - Every deployment-specific value is read through `lib/env.ts` and validated with zod.
 - `instrumentation.ts` validates the environment at runtime startup and is skipped only
   during `next build`.
-- `SIGNAL_PROVIDER_API_URL` and `SIGNAL_PROVIDER_API_KEY` are optional as a pair; if
-  either is missing, signal ingestion returns 503. There is no fake provider.
+- There is no signal-provider credential and no seller allowlist. Any journal that proves a
+  Sui wallet by signature may publish, and the wallet is where buyers pay.
+- `X402_PRICE` and `X402_LISTING_FEE` are validated against the Sui gasless minimum
+  (`0.01` USDC) at startup, because a lower value builds a sponsored transaction the
+  network rejects with `InsufficientGas`.
 - Missing database, Walrus, Tatum or x402 credentials stop the runtime instead of
   falling back to sample data.
 - Logs are pino JSON with a request id. Secrets and raw payloads are redacted.
 
 ## Verified on mainnet
 
-Live calls were made against Sui mainnet on 2 Nov 2026. Each row below was produced by
-running the named command and copying its output; nothing here is estimated.
+Live calls were made against Sui mainnet. Each row below was produced by running the named
+command and copying its output; nothing here is estimated. A Walrus write returns a new blob
+id on every run and Tatum's checkpoint advances continuously, so those two values are the
+ones recorded at the time of writing rather than constants.
 
 | Area                     | Result                                                                                                                         | Command              |
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------ | -------------------- |
 | Walrus Memory relayer    | `status: ok`, relayer `0.1.0`                                                                                                  | `pnpm verify:memory` |
 | Walrus write + recall    | blob `Y-TFsuMq1956BWInd8F26H62S1ohTI8hxT723DMjckE`, cosine distance `0.35874120150280087`, exact text returned                 | `pnpm verify:memory` |
-| `listMemories()`         | 9 memories in the demo namespace, `hasMore: false`                                                                             | `pnpm verify:memory` |
-| Mainnet memories written | 11 rows across `pick_commit`, `pick_reveal`, `outcome`, `preference`, `payment`, `source_roi`                                  | `memory_writes`      |
-| Tatum checkpoint         | `340802699`                                                                                                                    | `pnpm verify:tatum`  |
+| `listMemories()`         | 10 memories for `saksi_demo`, `hasMore: false` (one is added per verification run)                                             | `pnpm verify:memory` |
+| Mainnet memories written | 38 rows across `pick_commit` 12, `pick_reveal` 8, `outcome` 8, `preference` 8, `payment` 1, `source_roi` 1                     | `memory_writes`      |
+| Tatum checkpoint         | `341329560` (advances; any recent value proves the query)                                                                      | `pnpm verify:tatum`  |
 | Tatum transaction        | `DemaKkYM7Ni4mRJcxbth3e4h3BkkqgKnR1MYPdWhmgjq`, status `success`, 2 balance changes                                            | `pnpm verify:tatum`  |
 | Tatum balance            | operator agent `0` atomic USDC; merchant `10000` after settlement                                                              | `pnpm verify:tatum`  |
 | x402 settlement          | one real $0.01 USDC purchase, paid by a self-custody browser wallet and verified through Tatum before the payload was released | browser + `payments` |
+| Oracle fixtures          | 8 completed `eng.1` fixtures on 2026-10-31, each resolving to exactly one winner, including two draws                          | `pnpm verify:oracle` |
+| Oracle agreement         | "Chelsea to win" on `espn:eng.1:401879248` (Chelsea 2-0 Man Utd) stored as `oracle_verified`                                   | `outcomes`           |
+| Oracle contradiction     | a claimed win on a fixture the provider made a loss stored as `oracle_contradicted`, owner's claim preserved                   | `outcomes`           |
 
 ## Still unverified
 
 - `pnpm verify:x402`, the script-driven buyer, has not been run against mainnet. The paid
   purchase above went through the browser wallet instead, so the script path is code that
   shares the same client and seller route but has no recorded run of its own.
+- No signal has been published through the paid listing flow on mainnet yet, so the listing
+  fee has a verified challenge but no recorded settlement.
 - No public deployment exists, so settlement `resource.url` values point at
   `http://localhost:3000`.
-- The premium signal used for that purchase comes from `scripts/demo-signal-provider.ts`
-  and is a synthetic demo payload, not a real forecast product.
+- The catalogue signal used for the recorded purchase is a synthetic demo payload, not a
+  real forecast product.
+- Oracle coverage is one league (`eng.1`) and match-winner markets. Every other market stays
+  `self_attested` and is labelled that way.
 
 The code paths fail closed rather than substituting sample data. `README.md` marks any
 field it cannot back with real output as `not captured` instead of inventing a value.

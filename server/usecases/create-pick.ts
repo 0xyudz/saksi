@@ -5,6 +5,7 @@ import { getDb } from "@/db/client";
 import { analysts, picks, type PickRow } from "@/db/schema";
 import { remember } from "@/integrations/walrus-memory/client";
 import { buildPickCommitMemory } from "@/integrations/walrus-memory/schema";
+import { parseOracleRef } from "@/integrations/oracle/results";
 import { AppError } from "@/lib/errors";
 import { errorForLog, getLogger } from "@/lib/logger";
 import { nowIso } from "@/lib/time";
@@ -18,6 +19,15 @@ export const createPickSchema = z.object({
   odds: z.number().gt(1).max(1000),
   stakeUnits: z.number().int().min(1).max(1_000_000),
   revealAt: z.string().datetime({ offset: true }).optional(),
+  /**
+   * Optional pointer to an independent fixture, e.g. `espn:eng.1:401879254`. Chosen at seal
+   * time and never re-picked later: resolution reads the fixture this reference names, so a
+   * picker cannot shop for whichever match makes them look right after the fact.
+   *
+   * Deliberately not part of the committed payload. Adding it there would change the hash
+   * of every pick sealed before this field existed.
+   */
+  oracleEventRef: z.string().trim().min(1).max(120).optional(),
 });
 
 export type CreatePickInput = z.infer<typeof createPickSchema>;
@@ -50,6 +60,18 @@ export async function createPick(userId: string, input: CreatePickInput): Promis
     throw new AppError("VALIDATION_FAILED", "The reveal time must be after the commitment.");
   }
 
+  /**
+   * A malformed reference is rejected rather than dropped. Silently ignoring it would seal
+   * a pick the owner believes is oracle-linked while the resolver sees nothing, which is
+   * exactly the kind of false assurance this feature exists to prevent.
+   */
+  if (input.oracleEventRef !== undefined && parseOracleRef(input.oracleEventRef) === null) {
+    throw new AppError(
+      "VALIDATION_FAILED",
+      "The oracle reference must look like espn:eng.1:<fixture id>.",
+    );
+  }
+
   const payload = buildPickPayload({
     userId,
     analystId: input.analystId,
@@ -76,6 +98,7 @@ export async function createPick(userId: string, input: CreatePickInput): Promis
       pickPayload: payload,
       committedAt: new Date(committedAt),
       ...(input.revealAt === undefined ? {} : { revealAt: new Date(input.revealAt) }),
+      ...(input.oracleEventRef === undefined ? {} : { oracleEventRef: input.oracleEventRef }),
       status: "sealed",
     })
     .returning();

@@ -3,17 +3,14 @@ import type { NextRequest } from "next/server";
 import { z } from "zod";
 
 import { REQUEST_ID_HEADER } from "@/lib/config";
-import { getEnv } from "@/lib/env";
 import { AppError } from "@/lib/errors";
 import { handleRoute, jsonResponse } from "@/lib/http";
 import { toJsonObject } from "@/lib/json";
-import { parsePriceToAtomic } from "@/lib/price";
 import { assertWithinRateLimit } from "@/lib/rate-limit";
 import { authorizePayment } from "@/integrations/x402/seller";
 import { optionalApiUserId } from "@/server/auth";
 import { pickForUser } from "@/server/data/picks";
-import { assertSignalPriceMatches } from "@/server/scoring/payment-binding";
-import { getSignal } from "@/server/usecases/ingest-signal";
+import { getSignal } from "@/server/usecases/read-signal";
 import { verifyAndRecordSignalPayment } from "@/server/usecases/purchase-signal";
 
 export const dynamic = "force-dynamic";
@@ -48,9 +45,10 @@ export async function GET(
     if (!parsed.success) throw new AppError("VALIDATION_FAILED", "Invalid signal id.");
 
     // Read the signal and validate its price before the facilitator settles anything,
-    // so an unknown or stale listing cannot take the buyer's money first.
+    // so an unknown or stale listing cannot take the buyer's money first. The expected
+    // amount is the signal's own price: sellers set their own, and the x402 challenge is
+    // built from the same row, so a mismatch here means the row changed mid-flight.
     const signal = await getSignal(parsed.data);
-    assertSignalPriceMatches(signal.priceAtomic, parsePriceToAtomic(getEnv().X402_PRICE));
 
     // The browser may attach a pick so the provider's ROI can be scored later. Validate
     // ownership before the facilitator settles anything.

@@ -11,8 +11,10 @@ import { getEnv } from "@/lib/env";
 import { AppError } from "@/lib/errors";
 import { getLogger, errorForLog } from "@/lib/logger";
 import { formatUsd, parsePriceToAtomic } from "@/lib/price";
+import { findListingForPayment, type ListingPaymentTarget } from "@/server/data/listings";
 
 export const SIGNAL_ROUTE_PATTERN = "GET /api/signals/[id]";
+export const LISTING_ROUTE_PATTERN = "POST /api/signals";
 
 /**
  * `@tentaclepay/sui-x402` is built against the pre-ATM x402 core interface. The Sui
@@ -45,22 +47,85 @@ class SuiSchemeServerAdapter implements SchemeNetworkServer {
   }
 }
 
+/**
+ * The signal route is the only one whose recipient and amount vary per request.
+ *
+ * Buyers pay the seller's proven wallet directly, so `payTo` is resolved from the signal
+ * being purchased rather than from configuration. A missing or unlisted signal resolves
+ * to the platform address so the 402 challenge is still well formed; the handler rejects
+ * the request before any settlement is attempted.
+ *
+ * The amount is resolved from the same row, so a seller-set price cannot drift from what
+ * the challenge advertises and what Tatum later verifies.
+ */
+async function resolveSignalTerms(signalId: string): Promise<ListingPaymentTarget> {
+  const listing = await findListingForPayment(signalId);
+  if (listing) return listing;
+
+  const env = getEnv();
+  return {
+    payToAddress: env.X402_PAY_TO_ADDRESS,
+    priceAtomic: parsePriceToAtomic(env.X402_PRICE),
+  };
+}
+
+function signalIdFromPath(path: string): string | null {
+  const match = /\/api\/signals\/([^/?#]+)/.exec(path);
+  if (!match?.[1]) return null;
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return null;
+  }
+}
+
 function buildRoutes(): Record<string, RouteConfig> {
   const env = getEnv();
+  const signalPrice = formatUsd(parsePriceToAtomic(env.X402_PRICE));
+  const listingFee = formatUsd(parsePriceToAtomic(env.X402_LISTING_FEE));
+
   return {
     [SIGNAL_ROUTE_PATTERN]: {
       accepts: [
         {
           scheme: "exact",
-          // The x402 scheme always parses `price` as a human USD string. Saksi also
-          // accepts atomic values in `X402_PRICE`, so normalise through the same parser
-          // the ingest path uses; otherwise `10000` would be read as $10,000.
-          price: formatUsd(parsePriceToAtomic(env.X402_PRICE)),
+          // Both values are resolved per request. The x402 scheme parses `price` as a
+          // human USD string, so atomic configuration is normalised first.
+          price: async (context) => {
+            const signalId = signalIdFromPath(context.path || context.adapter.getPath());
+            if (signalId === null) return signalPrice;
+            const terms = await resolveSignalTerms(signalId);
+            return formatUsd(terms.priceAtomic);
+          },
+          network: env.SUI_NETWORK,
+          payTo: async (context) => {
+            const signalId = signalIdFromPath(context.path || context.adapter.getPath());
+            if (signalId === null) return env.X402_PAY_TO_ADDRESS;
+            const terms = await resolveSignalTerms(signalId);
+            return terms.payToAddress;
+          },
+        },
+      ],
+      description: "Saksi premium prediction signal, settled on Sui through x402",
+      mimeType: "application/json",
+    },
+    /**
+     * Publishing a signal costs a flat listing fee paid to the platform. This is the only
+     * revenue Saksi takes, and it is enforceable because a listing stays invisible until
+     * its fee is verified. It is deliberately not a percentage of sales: x402 `exact`
+     * pays one recipient per transaction, and Sui's gasless mode only permits
+     * `balance::send_funds`, so a split inside one settlement is not possible.
+     */
+    [LISTING_ROUTE_PATTERN]: {
+      accepts: [
+        {
+          scheme: "exact",
+          price: listingFee,
           network: env.SUI_NETWORK,
           payTo: env.X402_PAY_TO_ADDRESS,
         },
       ],
-      description: "Saksi premium prediction signal, settled on Sui through x402",
+      description: "Saksi signal listing fee",
       mimeType: "application/json",
     },
   };

@@ -51,7 +51,7 @@ imports either one; the relayer uses them.
 | TypeScript 5.9.3 (`strict`, no `any`)           | `noUncheckedIndexedAccess`, `noImplicitOverride`, `noFallthroughCasesInSwitch` all on. |
 | ESLint 9 + `eslint-config-next` 16.4.3          | `no-explicit-any`, `no-console`, `no-empty` (catch included), `eqeqeq` as errors.      |
 | Prettier 3.9.10 + `prettier-plugin-tailwindcss` | Formatting, including class ordering.                                                  |
-| Vitest 5.0.5                                    | Unit tests for pure functions only. 105 tests across 14 files.                         |
+| Vitest 5.0.5                                    | Unit tests for pure functions only. 125 tests across 15 files.                         |
 | `tsx` 4.20.6                                    | Runs the verification scripts without a build step.                                    |
 | Drizzle Kit 0.31.11                             | Migration generation and application.                                                  |
 
@@ -688,9 +688,9 @@ Two ordering decisions matter:
 
 ### 8.4 Price normalisation
 
-`X402_PRICE` accepts either `$0.01` (human USD) or `10000` (atomic units). The x402 scheme
-only understands USD strings, so the seller normalises through the same parser the ingest path
-uses:
+`X402_PRICE` and `X402_LISTING_FEE` accept either `$0.01` (human USD) or `10000` (atomic
+units). The x402 scheme only understands USD strings, so the seller normalises through
+`parsePriceToAtomic()` before advertising requirements:
 
 ```ts
 price: formatUsd(parsePriceToAtomic(env.X402_PRICE));
@@ -707,11 +707,15 @@ portable choice there.
 
 `server/scoring/payment-binding.ts` is pure and unit-tested. Three rules:
 
-| Rule                     | Effect                                                                                                                       |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
-| One digest, one signal   | Re-using a digest for a different signal → `409`.                                                                            |
-| One digest, one resource | Comparing normalised URLs (host lowercased, query and fragment dropped, trailing slash removed) → `409` on mismatch.         |
-| Price must not be stale  | If `signals.price_atomic` differs from the configured price, refuse before settlement with `409` "re-price by re-ingesting". |
+| Rule                     | Effect                                                                                                               |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| One digest, one signal   | Re-using a digest for a different signal → `409`.                                                                    |
+| One digest, one resource | Comparing normalised URLs (host lowercased, query and fragment dropped, trailing slash removed) → `409` on mismatch. |
+
+The advertised price comes from the signal row itself, so there is no configured price that
+can drift from a stored one. `server/scoring/payment-binding.ts` therefore no longer needs a
+stale-price rule; the row is the single source of truth for both the challenge and the
+verification floor.
 
 Legacy rows with `resource === null` remain valid as long as the signal id matches, so
 pre-deploy records are not invalidated.
@@ -856,7 +860,7 @@ of server rendering for **every** route. Symptoms:
 - The HTML response was an empty shell
   (`Switched to client rendering because a component requested it`).
 - Not-found pages answered **`200`** instead of `404`.
-- The operator ingest form never reached the HTML, so it appeared only after hydration.
+- The publish form never reached the HTML, so it appeared only after hydration.
 
 **The fix:** `createDAppKit` defers wallet discovery to `onMount` and falls back to in-memory
 storage when `localStorage` is unavailable, so it is SSR-safe. The provider is now imported
@@ -894,16 +898,16 @@ memory_writes       (operator audit, no foreign keys)
 recommendations     (pick_id nullable, cited_memory_ids jsonb)
 ```
 
-| Table             | Purpose                       | Key constraints                                                                 |
-| ----------------- | ----------------------------- | ------------------------------------------------------------------------------- |
-| `users`           | a journal identity            | `handle` unique; `recovery_hash` nullable (legacy journals)                     |
-| `analysts`        | who is being tracked          | `(name, kind)` unique; **global**, not owned by a user                          |
-| `picks`           | a sealed commitment           | FKs: `user_id` cascade, `analyst_id` restrict; indexes on user, analyst, status |
-| `outcomes`        | the resolution                | `pick_id` unique, cascade delete                                                |
-| `signals`         | a purchasable premium listing | `(provider, external_ref)` unique so re-ingest updates instead of duplicating   |
-| `payments`        | a verified settlement         | `digest` unique; `user_id` and `pick_id` `set null` on delete; index on payer   |
-| `memory_writes`   | audit of every Walrus write   | index on `kind`                                                                 |
-| `recommendations` | a persisted verdict           | index on `created_at`; `pick_id` `set null` on delete                           |
+| Table             | Purpose                      | Key constraints                                                                         |
+| ----------------- | ---------------------------- | --------------------------------------------------------------------------------------- |
+| `users`           | a journal identity           | `handle` unique; `recovery_hash` nullable (legacy journals)                             |
+| `analysts`        | who is being tracked         | `(name, kind)` unique; **global**, not owned by a user                                  |
+| `picks`           | a sealed commitment          | FKs: `user_id` cascade, `analyst_id` restrict; indexes on user, analyst, status         |
+| `outcomes`        | the resolution               | `pick_id` unique, cascade delete                                                        |
+| `signals`         | a purchasable signal listing | `(provider, external_ref)` unique; `listing_fee_digest` unique so one fee = one listing |
+| `payments`        | a verified settlement        | `digest` unique; `user_id` and `pick_id` `set null` on delete; index on payer           |
+| `memory_writes`   | audit of every Walrus write  | index on `kind`                                                                         |
+| `recommendations` | a persisted verdict          | index on `created_at`; `pick_id` `set null` on delete                                   |
 
 Two design notes:
 
@@ -921,12 +925,15 @@ Two design notes:
 Every deployment-specific value is read through `lib/env.ts` and validated with zod. `lib/config.ts`
 holds protocol constants only — no secret, address or price.
 
-Beyond per-field validation, three cross-field rules run in `superRefine`:
+Beyond per-field validation, four cross-field rules run in `superRefine`:
 
-1. `SIGNAL_PROVIDER_API_URL` and `SIGNAL_PROVIDER_API_KEY` must be set together, or neither.
-2. `TATUM_SUI_RPC_URL` host must contain `mainnet`/`testnet` matching `SUI_NETWORK`.
-3. When `X402_CLIENT_PRIVATE_KEY` is present, `AGENT_SUI_ADDRESS` must equal the address
+1. `TATUM_SUI_RPC_URL` host must contain `mainnet`/`testnet` matching `SUI_NETWORK`.
+2. When `X402_CLIENT_PRIVATE_KEY` is present, `AGENT_SUI_ADDRESS` must equal the address
    derived from it — so a mismatched operator key fails at startup, not at payment time.
+3. `X402_PRICE` and `X402_LISTING_FEE` must each be at least `GASLESS_MIN_ATOMIC` (10000
+   atomic, 0.01 USDC). Sui only sponsors gas at or above that floor, so a lower value would
+   build a sponsored transaction the network rejects with `InsufficientGas`; catching it at
+   startup means the first buyer or seller never sees it.
 
 Validation is lazy and cached, for one specific reason: `next build` must compile routes
 without production credentials, while every runtime entry point still fails fast. The
@@ -963,44 +970,49 @@ and the footer.
 
 ### Journal pages
 
-| Page             | What it does                                                                                                                                                                                        |
-| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `/dashboard`     | Dashboard: pick stats, credibility leaderboard, latest commitments, the most recent memory-driven decision with its cited blob ids, and a live settlement feed built from Tatum transaction events. |
-| `/onboarding`    | Creates a journal and reveals the 24-symbol recovery code **once**, behind a checkbox that must be ticked before entering.                                                                          |
-| `/resume`        | Restores a session from handle + recovery code. Accepts the code in any case or grouping.                                                                                                           |
-| `/picks`         | Public ledger plus `?mine=true`. Sealed rows show only hash and timestamp to non-owners.                                                                                                            |
-| `/picks/new`     | Two-step flow: ask memory first (recommendation), then commit the sealed pick.                                                                                                                      |
-| `/picks/[id]`    | Proof detail: commitment hash, whether the stored payload still matches, reveal/resolve actions for the owner only, and the resolution with its source URL.                                         |
-| `/analysts`      | Leaderboard with credibility score, win rate and how many samples were community-attested.                                                                                                          |
-| `/analysts/[id]` | Calibration bins, resolved evidence list, and the analyst's pick history.                                                                                                                           |
-| `/memory`        | Relayer health, `listMemories()` pages with a truncation flag, a live recall search that shows memory text with its cosine distance, and a form to teach a preference.                              |
-| `/signals`       | Signal catalogue with prices and purchase counts; the ingest form appears only for a signed-in operator.                                                                                            |
-| `/signals/[id]`  | The paid resource. Shows the price, the wallet purchase panel, and — after payment — the payload with digest, payer, amount and explorer link.                                                      |
-| `/payments`      | Settlement ledger, merchant USDC balance from Tatum, on-chain events, and read-only digest verification.                                                                                            |
+| Page               | What it does                                                                                                                                                                                                                                                          |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/dashboard`       | Dashboard: pick stats, a seller panel with settled earnings and own verification counts, credibility leaderboard, latest commitments, the most recent memory-driven decision with its cited blob ids, and a live settlement feed built from Tatum transaction events. |
+| `/onboarding`      | Claims a handle by proving a wallet by signature, then reveals the 24-symbol recovery code **once**, behind a checkbox that must be ticked before entering.                                                                                                           |
+| `/resume`          | Restores a session by signing with the bound wallet, or with handle + recovery code as a fallback. Accepts the code in any case or grouping.                                                                                                                          |
+| `/settings/wallet` | Binds a wallet to a journal created before wallet auth existed. One-way: a bound address cannot be replaced.                                                                                                                                                          |
+| `/picks`           | Public ledger plus `?mine=true`. Sealed rows show only hash and timestamp to non-owners.                                                                                                                                                                              |
+| `/picks/new`       | Two-step flow: ask memory first (recommendation), then commit the sealed pick.                                                                                                                                                                                        |
+| `/picks/[id]`      | Proof detail: commitment hash, whether the stored payload still matches, reveal/resolve actions for the owner only, and the resolution with its source URL.                                                                                                           |
+| `/analysts`        | Leaderboard with credibility score, a separate verified score, and how many samples an independent provider confirmed.                                                                                                                                                |
+| `/analysts/[id]`   | Calibration bins, resolved evidence list, and the analyst's pick history.                                                                                                                                                                                             |
+| `/memory`          | Relayer health, `listMemories()` pages with a truncation flag, a live recall search that shows memory text with its cosine distance, and a form to teach a preference.                                                                                                |
+| `/signals`         | Signal marketplace: every listing whose fee digest was verified, with prices and purchase counts; the publish panel appears for a journal with a proven wallet.                                                                                                       |
+| `/signals/[id]`    | The paid resource. Shows the price, the wallet purchase panel, and — after payment — the payload with digest, payer, amount and explorer link.                                                                                                                        |
+| `/payments`        | Settlement ledger, merchant USDC balance from Tatum, on-chain events, and read-only digest verification.                                                                                                                                                              |
 
 ### Routes
 
-| Route                          | Auth                   | Notes                                                                  |
-| ------------------------------ | ---------------------- | ---------------------------------------------------------------------- |
-| `GET /api/session`             | optional               | Current user plus `hasRecovery`.                                       |
-| `POST /api/session`            | origin-checked         | Create a journal; returns the recovery code once, `201`.               |
-| `PATCH /api/session`           | origin-checked, 10/min | Resume with handle + code.                                             |
-| `DELETE /api/session`          | origin-checked         | Log out.                                                               |
-| `GET /api/picks`               | optional               | Feed, `?mine=true`, redacted per viewer.                               |
-| `POST /api/picks`              | session                | Seal a pick; rolls back on memory failure.                             |
-| `GET /api/picks/[id]`          | optional               | Single pick, redacted per viewer.                                      |
-| `POST /api/picks/[id]/reveal`  | owner                  | Hash + time-lock checked.                                              |
-| `POST /api/picks/[id]/resolve` | owner                  | Source URL + timestamp required; `201`.                                |
-| `GET /api/analysts`            | public                 | Leaderboard.                                                           |
-| `POST /api/analysts`           | session                | Create an analyst; duplicate → `409`.                                  |
-| `POST /api/recommendations`    | session                | Recall before deciding; persists citations; `201`.                     |
-| `POST /api/memory/preferences` | session                | Write a preference memory; `201` with a blob id.                       |
-| `GET /api/signals`             | public                 | Catalogue with prices and purchase counts.                             |
-| `POST /api/signals`            | operator, 10/min       | Ingest from the provider; `503` if unconfigured, `404` for unknown id. |
-| `GET /api/signals/[id]`        | x402 payment, 30/min   | Paywall; Tatum verification before release.                            |
-| `GET /api/payments`            | public                 | Ledger plus merchant balance and events.                               |
-| `POST /api/payments/verify`    | origin-checked, 10/min | Read-only digest check; never inserts.                                 |
-| `GET /api/health`              | public                 | Database + Walrus + Tatum; `503` if any fails; no secrets.             |
+| Route                           | Auth                   | Notes                                                                   |
+| ------------------------------- | ---------------------- | ----------------------------------------------------------------------- |
+| `GET /api/session`              | optional               | Current user plus `hasRecovery`.                                        |
+| `PUT /api/session`              | origin-checked         | Issue a single-use challenge for claim, login or bind.                  |
+| `POST /api/session`             | origin-checked         | Claim a handle with the wallet signature; returns the code once, `201`. |
+| `POST /api/session/wallet`      | origin-checked         | Sign in with the wallet already bound to a journal.                     |
+| `POST /api/session/wallet/bind` | origin-checked         | Bind a wallet to an existing journal; one-way, `409` if already bound.  |
+| `PATCH /api/session`            | origin-checked, 10/min | Resume with handle + code.                                              |
+| `DELETE /api/session`           | origin-checked         | Log out.                                                                |
+| `GET /api/picks`                | optional               | Feed, `?mine=true`, redacted per viewer.                                |
+| `POST /api/picks`               | session                | Seal a pick; rolls back on memory failure.                              |
+| `GET /api/picks/[id]`           | optional               | Single pick, redacted per viewer.                                       |
+| `POST /api/picks/[id]/reveal`   | owner                  | Hash + time-lock checked.                                               |
+| `POST /api/picks/[id]/resolve`  | owner                  | Oracle consulted when the pick carries a fixture ref; `201`.            |
+| `GET /api/oracle/fixtures`      | session                | Fixtures for one league/date so a picker can link a real match.         |
+| `GET /api/analysts`             | public                 | Leaderboard.                                                            |
+| `POST /api/analysts`            | session                | Create an analyst; duplicate → `409`.                                   |
+| `POST /api/recommendations`     | session                | Recall before deciding; persists citations; `201`.                      |
+| `POST /api/memory/preferences`  | session                | Write a preference memory; `201` with a blob id.                        |
+| `GET /api/signals`              | public                 | Marketplace; only fee-verified listings appear.                         |
+| `POST /api/signals`             | wallet proof, 10/min   | x402 listing fee, then publish; `403` without a proven wallet.          |
+| `GET /api/signals/[id]`         | x402 payment, 30/min   | Paywall; Tatum verification before release.                             |
+| `GET /api/payments`             | public                 | Ledger plus merchant balance and events.                                |
+| `POST /api/payments/verify`     | origin-checked, 10/min | Read-only digest check; never inserts.                                  |
+| `GET /api/health`               | public                 | Database + Walrus + Tatum; `503` if any fails; no secrets.              |
 
 ### The three journeys that matter
 
@@ -1008,19 +1020,24 @@ and the footer.
 
 ```txt
 /onboarding → recovery code shown once
-/picks/new  → ask memory → seal (hash + pick_commit memory)
+/picks/new  → ask memory → pick a real fixture → seal (hash + pick_commit memory)
 /picks/[id] → reveal (hash re-verified, pick_reveal memory)
-            → resolve with source URL (outcome + bias + source_roi memories)
+            → resolve → provider re-read → oracle_verified / oracle_contradicted
+            → outcome + bias + source_roi memories
 /memory     → the blobs appear, with text and distances
 ```
 
-**B. Buy a signal (money involved, self-custody).**
+**B. Sell a signal, then buy one (money involved, self-custody).**
 
 ```txt
-/signals/[id] → connect wallet → sign the exact Sui payment
-              → facilitator settles → seller verifies through Tatum
-              → payload released → payment + source_roi memories written
-/payments     → digest, payer, amount, merchant balance, explorer link
+/settings/wallet → sign once to bind a payout address (one-way)
+/signals         → publish a signal → sign the flat listing fee
+                 → facilitator settles → Tatum verifies the digest
+                 → listing becomes visible with the seller's wallet as payee
+/signals/[id]    → connect wallet → sign the exact Sui payment
+                 → facilitator settles → seller verifies through Tatum
+                 → payload released → payment + source_roi memories written
+/payments        → digest, payer, amount, merchant balance, explorer link
 ```
 
 **C. Let memory change a decision.**
@@ -1033,55 +1050,55 @@ next pick on that analyst
   → verdict downgraded, warning cites the blob
 ```
 
-### The demo signal provider
+### The demo signal provider is gone
 
-`scripts/demo-signal-provider.ts` is a local HTTP server (`pnpm demo:provider`, port 4100)
-that implements exactly the provider contract documented in `README.md` under
-**Signal provider contract**, with bearer-token comparison done via `timingSafeEqual`. It
-exists so the ingest → x402 → Tatum path can be exercised end to end without pretending a
-data vendor is connected.
-
-Its two payloads (`demo-1`, `demo-2`) are labelled **synthetic demo payload** in the payload
-itself and everywhere they surface. They are never presented as real forecasts.
+The local demo provider and the ingest path were removed when selling became open. A
+journal no longer ingests from a vendor contract; it publishes its own payload after paying
+the flat listing fee. The one catalogue payload kept for testing is labelled **synthetic
+demo payload** in the payload itself and everywhere it appears, and is never presented as a
+real forecast.
 
 ---
 
 ## 14. Testing strategy
 
-The suite is deliberately narrow: **105 tests across 14 files, all pure functions.** No
+The suite is deliberately narrow: **125 tests across 15 files, all pure functions.** No
 network, no database, no fake service.
 
-| File                      | What it pins down                                                                                   |
-| ------------------------- | --------------------------------------------------------------------------------------------------- |
-| `canonical.test.ts`       | Key ordering, array order, `undefined` handling, SHA-256 test vectors, hash stability               |
-| `brier.test.ts`           | Implied probability, Brier values, void handling, calibration bins                                  |
-| `credibility.test.ts`     | Empty sample, void counting, calibration weighting, recency decay, ordering                         |
-| `bias.test.ts`            | Minimum evidence, underdog/favourite/overconfidence patterns, void exclusion, sorting               |
-| `payment-binding.test.ts` | Digest-to-signal binding, resource normalisation, stale price, retry classification                 |
-| `memory-schema.test.ts`   | Round-trip every kind, delimiter escaping, malformed rejection, sealed commit never leaks selection |
-| `price.test.ts`           | USD → atomic scaling, bare integer as atomic, precision rejection, formatting                       |
-| `coin-type.test.ts`       | Short/padded/mixed-case coin type equality                                                          |
-| `recovery-code.test.ts`   | Alphabet, uniqueness, normalisation, verification, `null` hash, malformed hash, fresh salt          |
-| `session-cookie.test.ts`  | Round-trip, tampered signature, tampered id, legacy cookie, wrong secret                            |
-| `signal-provider.test.ts` | HTTP status → error mapping, retry only on 5xx                                                      |
-| `tatum-mapping.test.ts`   | GraphQL response → domain shapes, balance change mapping                                            |
-| `ids.test.ts`             | UUID acceptance and rejection, including out-of-range version nibble                                |
-| `markdown.test.ts`        | Inline emphasis/links/code spans, table cell splitting, fenced code, list folding, heading anchors  |
+| File                       | What it pins down                                                                                   |
+| -------------------------- | --------------------------------------------------------------------------------------------------- |
+| `canonical.test.ts`        | Key ordering, array order, `undefined` handling, SHA-256 test vectors, hash stability               |
+| `brier.test.ts`            | Implied probability, Brier values, void handling, calibration bins                                  |
+| `credibility.test.ts`      | Empty sample, void counting, calibration weighting, recency decay, ordering, verified-only score    |
+| `bias.test.ts`             | Minimum evidence, underdog/favourite/overconfidence patterns, void exclusion, sorting               |
+| `payment-binding.test.ts`  | Digest-to-signal binding, resource normalisation, stale price, retry classification                 |
+| `memory-schema.test.ts`    | Round-trip every kind, delimiter escaping, malformed rejection, sealed commit never leaks selection |
+| `oracle.test.ts`           | Ref parsing, selection parsing, team-name normalisation, refusing a name that matches neither side  |
+| `wallet-signature.test.ts` | Ed25519 accept/reject, wrong address, tampered message, malformed signature returns `false`         |
+| `price.test.ts`            | USD → atomic scaling, bare integer as atomic, precision rejection, formatting                       |
+| `coin-type.test.ts`        | Short/padded/mixed-case coin type equality                                                          |
+| `recovery-code.test.ts`    | Alphabet, uniqueness, normalisation, verification, `null` hash, malformed hash, fresh salt          |
+| `session-cookie.test.ts`   | Round-trip, tampered signature, tampered id, legacy cookie, wrong secret                            |
+| `tatum-mapping.test.ts`    | GraphQL response → domain shapes, balance change mapping                                            |
+| `ids.test.ts`              | UUID acceptance and rejection, including out-of-range version nibble                                |
+| `markdown.test.ts`         | Inline emphasis/links/code spans, table cell splitting, fenced code, list folding, heading anchors  |
 
 What is **not** unit tested, and how it is covered instead:
 
 - Route handlers, use-cases and SQL → verified by hand against a live instance, and the exact
   results are recorded in `README.md` (journey table) and `docs/INTEGRATIONS.md`.
-- Walrus and Tatum integrations → covered by the three `verify:*` scripts against mainnet.
-- UI → covered by manual checks: server-rendered markup present, real `404`s, operator form
-  visible only to an operator, merchant balance correct, wallet connect in a real browser.
+- Walrus, Tatum and the results oracle → covered by the `verify:*` scripts against mainnet.
+- Wallet claim/login/bind → exercised against a live server with a generated Ed25519 keypair;
+  the signature primitive itself is unit tested, including the malformed-input regression.
+- UI → covered by manual checks: server-rendered markup present, real `404`s, wallet connect
+  in a real browser, verified badge on an oracle-confirmed outcome.
 
 This is a conscious choice: mocking Walrus and Tatum would test the mocks, and the claims in
 the README are only worth anything if they come from real calls.
 
 ### Verification scripts
 
-Three scripts hit real services, print JSON lines, and exit non-zero on failure. They load
+Four scripts hit real services, print JSON lines, and exit non-zero on failure. They load
 `.env.local` then `.env` (same precedence as Next.js) via `scripts/load-env.ts`, and contain
 no sample values.
 
@@ -1090,6 +1107,7 @@ no sample values.
 | `pnpm verify:memory` | Relayer `health()`, a real `rememberAndWait()` blob id, a `recall()` with cosine distance and exact text returned, and a `listMemories()` page.                                                                                   |
 | `pnpm verify:tatum`  | Latest checkpoint, a named transaction's status and balance changes, and the operator agent's USDC balance.                                                                                                                       |
 | `pnpm verify:x402`   | Pays the real paywalled endpoint with `X402_CLIENT_PRIVATE_KEY`, then re-verifies the returned digest through Tatum — a second check even though the seller already performed one, so a compromised seller cannot fake a receipt. |
+| `pnpm verify:oracle` | Read-only: fetches a real scoreboard, reads every completed fixture back through the resolver's own code, and fails if any match does not resolve to exactly one winner.                                                          |
 
 `verify:x402` requires the app to be running at `APP_BASE_URL` and a real signal id in
 `X402_TEST_SIGNAL_ID`. It has not been run against mainnet; the recorded purchase in the
@@ -1107,24 +1125,24 @@ gates are documented in the README Status table and were all run before submissi
 
 ## 15. Failure policy matrix
 
-| Situation                                    | Behaviour                                                             | Status    |
-| -------------------------------------------- | --------------------------------------------------------------------- | --------- |
-| Postgres unreachable                         | `/api/health` degraded; pages that need data fail                     | 503       |
-| Walrus down at seal time                     | Pick row deleted, nothing claimed                                     | 502       |
-| Walrus down at resolve time                  | Outcome rolled back                                                   | 502       |
-| Walrus down at reveal / bias / ROI / payment | Operation succeeds; failure logged                                    | 2xx       |
-| Tatum down during payment verification       | Signal refused, retried for ~20 s first                               | 402       |
-| Tatum slow to index a fresh digest           | Retried 7× with backoff; buyer can re-check the digest without paying | 402 → 200 |
-| Tatum down on `/payments`                    | Page renders with `balance: unavailable` and no substitute feed       | 200       |
-| x402 facilitator unreachable                 | `UPSTREAM_UNAVAILABLE`; no payment is recorded                        | 502       |
-| Signal provider unconfigured                 | Ingest refused, no fabricated data                                    | 503       |
-| Signal provider returns 404                  | `NOT_FOUND` for that external id                                      | 404       |
-| Signal price changed since ingestion         | Settlement refused before money moves                                 | 409       |
-| Digest already used for another signal       | Settlement refused                                                    | 409       |
-| Non-operator calls ingest                    | Refused; caller is authenticated, just not an operator                | 403       |
-| Signed-out write                             | Refused                                                               | 401       |
-| Cross-origin session write                   | Refused                                                               | 403       |
-| Malformed or stale detail URL                | Not-found page, no database error                                     | 404       |
+| Situation                                    | Behaviour                                                               | Status    |
+| -------------------------------------------- | ----------------------------------------------------------------------- | --------- |
+| Postgres unreachable                         | `/api/health` degraded; pages that need data fail                       | 503       |
+| Walrus down at seal time                     | Pick row deleted, nothing claimed                                       | 502       |
+| Walrus down at resolve time                  | Outcome rolled back                                                     | 502       |
+| Walrus down at reveal / bias / ROI / payment | Operation succeeds; failure logged                                      | 2xx       |
+| Tatum down during payment verification       | Signal refused, retried for ~20 s first                                 | 402       |
+| Tatum slow to index a fresh digest           | Retried 7× with backoff; buyer can re-check the digest without paying   | 402 → 200 |
+| Tatum down on `/payments`                    | Page renders with `balance: unavailable` and no substitute feed         | 200       |
+| x402 facilitator unreachable                 | `UPSTREAM_UNAVAILABLE`; no payment is recorded                          | 502       |
+| Listing price below the gasless floor        | Startup refuses the configuration                                       | exit 1    |
+| Publish without a proven wallet              | Refused; caller is signed in but has no payout address                  | 403       |
+| Oracle contradicts a claimed win             | Stored as `oracle_contradicted`, owner's claim preserved                | 201       |
+| Oracle unreachable at resolve time           | Falls back to `self_attested` with `oracleNote`; never blocks the write | 201       |
+| Digest already used for another signal       | Settlement refused                                                      | 409       |
+| Signed-out write                             | Refused                                                                 | 401       |
+| Cross-origin session write                   | Refused                                                                 | 403       |
+| Malformed or stale detail URL                | Not-found page, no database error                                       | 404       |
 
 The general rule: **the product fails closed and says which layer failed.** It never
 substitutes sample data, a cached success, or a placeholder row.
@@ -1133,19 +1151,26 @@ substitutes sample data, a cached success, or a placeholder row.
 
 ## 16. Limitations, stated plainly
 
-- Outcomes are **self-attested**. `sourceUrl` is validated as an http(s) URL but never
+- Outcomes are **self-attested outside the oracle's scope**. Oracle verification covers one
+  league (`espn:eng.1`) and match-winner markets only; everything else records
+  `self_attested`, is labelled that way in the UI, and contributes nothing to a seller's
+  verified score. For those rows `sourceUrl` is validated as an http(s) URL but never
   fetched, so the hash and the calibration score do not establish that the cited result is
-  true. The UI labels this on every resolved pick.
-- Analyst scores are community-attested for the same reason.
+  true.
+- A contradicted claim is preserved rather than rejected: `outcomes.result` keeps what the
+  owner said and `oracleResult` keeps what the provider recorded. Only `oracle_verified`
+  counts toward `verifiedScore`.
 - The session cookie has no rotation or revocation list.
-- Losing a recovery code loses the journal permanently.
+- Losing both the bound wallet and the recovery code loses the journal permanently.
 - The rate limiter is per-instance memory.
 - Tatum's Sui support is mainnet-only for the interfaces used here.
 - The x402 settlement happens before Tatum verification, so a sustained Tatum outage after
   settlement means the buyer has paid and must retry to receive the payload. This is the
   fail-closed trade-off, and it is documented rather than hidden.
-- The premium signal used in the recorded purchase is a **synthetic demo payload** from
-  `scripts/demo-signal-provider.ts`, not a real forecast product.
+- The catalogue signal used in the recorded purchase is a **synthetic demo payload**, not a
+  real forecast product.
+- No signal has been published through the paid listing flow on mainnet yet, so the listing
+  fee has a verified `402` challenge but no recorded settlement digest.
 - `pnpm verify:x402` has not been run against mainnet; the recorded purchase was made with a
   browser wallet. That row is marked as such in `docs/INTEGRATIONS.md`.
 - No public deployment existed when the proof table was written, so recorded settlement

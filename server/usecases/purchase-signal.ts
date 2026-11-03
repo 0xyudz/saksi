@@ -14,7 +14,7 @@ import {
   assertSettlementMatchesSignal,
   isRetryablePaymentError,
 } from "@/server/scoring/payment-binding";
-import { getSignal } from "./ingest-signal";
+import { getSignal } from "./read-signal";
 
 /**
  * Tatum's indexer lags a freshly settled digest by a few seconds, so the seller has to
@@ -202,9 +202,18 @@ export async function verifyAndRecordSignalPayment(input: {
 }): Promise<VerifiedSignalPayment> {
   const env = getEnv();
   const signal = input.signal ?? (await getSignal(input.signalId));
+
+  /**
+   * The recipient is the listing's own payee, not a global constant. A signal published by
+   * a seller is paid to that seller's proven wallet, and Tatum must confirm the money
+   * actually landed there. Legacy catalogue rows without a payee fall back to the platform
+   * address, which is where those rows have always been paid.
+   */
+  const payTo = signal.payToAddress ?? env.X402_PAY_TO_ADDRESS;
+
   const verified = await verifyPaymentWithRetry({
     digest: input.digest,
-    payTo: env.X402_PAY_TO_ADDRESS,
+    payTo,
     minAmountAtomic: signal.priceAtomic,
     network: env.SUI_NETWORK,
   });

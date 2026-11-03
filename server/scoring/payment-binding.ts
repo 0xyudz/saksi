@@ -63,19 +63,6 @@ export function assertSettlementMatchesSignal(input: SettlementBindingInput): vo
 }
 
 /**
- * The x402 route config is static while the signal row stores the price at ingestion
- * time. Refuse to settle when those disagree instead of charging a stale amount.
- */
-export function assertSignalPriceMatches(
-  signalPriceAtomic: bigint,
-  configuredPriceAtomic: bigint,
-): void {
-  if (signalPriceAtomic !== configuredPriceAtomic) {
-    throw new AppError("CONFLICT", "Signal price is stale; re-ingest the signal.");
-  }
-}
-
-/**
  * Only recovery-worthy failures may be retried. Validation errors, network mismatches and
  * insufficient payments are deterministic, so retrying them just delays the error.
  *

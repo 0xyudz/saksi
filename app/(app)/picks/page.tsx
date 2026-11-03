@@ -36,6 +36,9 @@ export default async function PicksPage({
               resolvedBy: item.outcome.resolvedBy,
               brier: item.outcome.brier,
               payoutUnits: null,
+              verification: item.outcome.verification,
+              oracleResult: item.outcome.oracleResult,
+              oracleNote: item.outcome.oracleNote,
             },
     }),
   );

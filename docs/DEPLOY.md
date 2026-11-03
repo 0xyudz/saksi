@@ -48,24 +48,25 @@ environment (and Preview if you want preview deploys to work).
 | `SUI_USDC_COIN_TYPE`             | USDC coin type used for balances and verification           |
 | `AGENT_SUI_ADDRESS`              | operator wallet shown on `/payments`                        |
 | `X402_FACILITATOR_URL`           | Tentacle Pay facilitator                                    |
-| `X402_PAY_TO_ADDRESS`            | merchant address that receives signal payments              |
+| `X402_PAY_TO_ADDRESS`            | platform address: receives listing fees, fallback recipient |
 | `X402_PRICE`                     | `10000` (atomic, $0.01) — avoid a literal `$` on Vercel too |
+| `X402_LISTING_FEE`               | `20000` (atomic, $0.02) — flat fee a seller pays to publish |
+| `ORACLE_ESPN_BASE_URL`           | optional; defaults to the public ESPN scoreboard API        |
+| `ORACLE_ENABLED`                 | `true`; set `false` to leave every outcome self-attested    |
 | `APP_BASE_URL`                   | the deployment URL, no trailing slash                       |
 | `SESSION_SECRET`                 | **secret** — at least 32 chars                              |
 | `DB_POOL_MAX`                    | `3` on serverless                                           |
 | `LOG_LEVEL`                      | `info`                                                      |
 | `TATUM_VERIFY_DIGEST`            | optional; the recorded mainnet settlement digest            |
-| `OPERATOR_HANDLES`               | optional; comma-separated handles allowed to ingest signals |
 
-Leave `X402_CLIENT_PRIVATE_KEY`, `X402_TEST_SIGNAL_ID` and `SIGNAL_PROVIDER_*` unset in
-production: browser buyers sign with their own wallet, and the demo signal provider runs
-on your machine only.
+Leave `X402_CLIENT_PRIVATE_KEY` and `X402_TEST_SIGNAL_ID` unset in production: browser
+buyers and sellers sign with their own wallet, so the app never needs a key.
 
-`OPERATOR_HANDLES` is also optional. Leave it empty and `/api/signals` POST returns 403
-for every journal, which is the safe default for a public demo. If you want the ingest
-path demonstrable, list exactly one handle and create that journal yourself. Setting it
-also reveals the ingest form on `/signals` for everyone, so the gate is enforced in the
-route, not in the UI.
+There is no seller allowlist and no provider credential to configure. Any journal that
+proves a Sui wallet by signature may publish a signal; that wallet is where buyers pay.
+`X402_PRICE` and `X402_LISTING_FEE` must both be at least `10000` atomic (0.01 USDC), or
+startup fails: Sui will not sponsor gas below that floor, and a lower value would build a
+transaction the network rejects with `InsufficientGas`.
 
 `APP_BASE_URL` is chicken-and-egg on the first deploy. Deploy once, copy the assigned
 domain, set `APP_BASE_URL` to it, then redeploy. A wrong value breaks session `Origin`

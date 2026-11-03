@@ -28,26 +28,26 @@ export default async function OnboardingPage() {
         <ul className="text-muted mt-8 space-y-3 text-sm">
           <li className="flex gap-3">
             <span className="mono text-amber">01</span>
-            <span>Commit with sha256(canonical(pick)) before the event.</span>
+            <span>Prove a Sui wallet — one signature, no payment, no funds moved.</span>
           </li>
           <li className="flex gap-3">
             <span className="mono text-amber">02</span>
-            <span>Reveal, then resolve against evidence you must cite.</span>
+            <span>Commit with sha256(canonical(pick)) before the event.</span>
           </li>
           <li className="flex gap-3">
             <span className="mono text-amber">03</span>
-            <span>Recall your own bias and paid-source ROI on the next pick.</span>
+            <span>Resolve against an independent result provider, not your own word.</span>
           </li>
         </ul>
       </div>
 
       <div className="card p-6 sm:p-8">
         <p className="mono text-muted text-[10px] tracking-[0.18em] uppercase">New journal</p>
-        <h2 className="display mt-3 text-3xl">Choose a handle</h2>
+        <h2 className="display mt-3 text-3xl">Claim a handle</h2>
         <p className="text-muted mt-2 mb-6 text-xs leading-relaxed">
-          No email, no password, no wallet connection. A local session cookie scopes your journal to
-          your own Walrus Memory namespace, and a one-time recovery code lets you come back after
-          logging out.
+          No email, no password. One wallet claims one handle, and that proven address is where
+          buyers pay you if you publish signals. A one-time recovery code is your fallback if the
+          wallet is lost.
         </p>
         <OnboardingForm />
       </div>

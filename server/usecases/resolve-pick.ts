@@ -9,6 +9,7 @@ import {
   buildOutcomeMemory,
   buildSourceRoiMemory,
 } from "@/integrations/walrus-memory/schema";
+import { parseOracleRef, parseSelection, readFixtureResult } from "@/integrations/oracle/results";
 import { UNDERDOG_ODDS_THRESHOLD } from "@/lib/config";
 import { AppError } from "@/lib/errors";
 import { errorForLog, getLogger } from "@/lib/logger";
@@ -40,6 +41,119 @@ export interface ResolvePickResult {
   readonly biasBlobId: string | null;
   readonly biasPattern: string | null;
   readonly sourceRoiBlobIds: readonly string[];
+  /** What the independent provider concluded, when one could be consulted. */
+  readonly oracle: {
+    readonly result: "win" | "loss" | "void";
+    readonly source: string;
+    readonly sourceUrl: string;
+    readonly score: string;
+  } | null;
+  /** Why no oracle verdict exists, shown to the user instead of a false claim. */
+  readonly oracleNote: string | null;
+}
+
+interface OracleDecision {
+  readonly verification: "self_attested" | "oracle_verified" | "oracle_contradicted";
+  readonly oracleResult: "win" | "loss" | "void" | null;
+  readonly oracleSource: string | null;
+  readonly oracleEventId: string | null;
+  readonly oracleNote: string | null;
+  readonly verifiedAt: Date | null;
+  readonly display: ResolvePickResult["oracle"];
+}
+
+/**
+ * Asks the independent provider what happened, and decides how much trust the claim earns.
+ *
+ * A contradiction does not overwrite the owner's result: the journal is theirs and the
+ * stored outcome should record what they claimed. What changes is `verification`, which is
+ * what the credibility model reads. A pick the provider disagrees with therefore cannot
+ * contribute to a seller's verified record, which is the whole point of the feature.
+ */
+async function consultOracle(
+  pick: PickRow,
+  claimed: "win" | "loss" | "void",
+): Promise<OracleDecision> {
+  const ref = pick.oracleEventRef === null ? null : parseOracleRef(pick.oracleEventRef);
+
+  if (ref === null) {
+    return {
+      verification: "self_attested",
+      oracleResult: null,
+      oracleSource: null,
+      oracleEventId: null,
+      oracleNote:
+        "No independent fixture was linked at seal time, so this result is the journal's own claim.",
+      verifiedAt: null,
+      display: null,
+    };
+  }
+
+  const selection = parseSelection(pick.selection);
+  if (selection === null) {
+    return {
+      verification: "self_attested",
+      oracleResult: null,
+      oracleSource: `espn:${ref.league}`,
+      oracleEventId: ref.eventId,
+      oracleNote: `The selection "${pick.selection}" is not a match-winner pick the oracle can read.`,
+      verifiedAt: null,
+      display: null,
+    };
+  }
+
+  let verdict: Awaited<ReturnType<typeof readFixtureResult>>;
+  try {
+    verdict = await readFixtureResult(ref, selection);
+  } catch (error) {
+    getLogger().warn(
+      { error: errorForLog(error), oracleRef: pick.oracleEventRef },
+      "oracle lookup failed; outcome stays self-attested",
+    );
+    return {
+      verification: "self_attested",
+      oracleResult: null,
+      oracleSource: `espn:${ref.league}`,
+      oracleEventId: ref.eventId,
+      oracleNote:
+        error instanceof AppError
+          ? `The results provider could not confirm this fixture: ${error.message}`
+          : "The results provider could not confirm this fixture.",
+      verifiedAt: null,
+      display: null,
+    };
+  }
+
+  if (verdict === null) {
+    return {
+      verification: "self_attested",
+      oracleResult: null,
+      oracleSource: `espn:${ref.league}`,
+      oracleEventId: ref.eventId,
+      oracleNote: "The fixture has not finished yet, so the provider has no result to compare.",
+      verifiedAt: null,
+      display: null,
+    };
+  }
+
+  const agrees = claimed === "void" ? true : claimed === verdict.result;
+
+  return {
+    verification: agrees ? "oracle_verified" : "oracle_contradicted",
+    oracleResult: verdict.result,
+    oracleSource: `espn:${ref.league}`,
+    oracleEventId: ref.eventId,
+    oracleNote: agrees
+      ? null
+      : `The provider recorded ${verdict.homeTeam} ${verdict.homeScore}–${verdict.awayScore} ${verdict.awayTeam}, which makes this pick a ${verdict.result}.`,
+    verifiedAt: new Date(),
+    display: {
+      result: verdict.result,
+      source: `espn:${ref.league}`,
+      sourceUrl: verdict.sourceUrl,
+      score: `${verdict.homeTeam} ${verdict.homeScore}–${verdict.awayScore} ${verdict.awayTeam}`,
+    },
+  };
 }
 
 export async function resolvePick(
@@ -80,6 +194,11 @@ export async function resolvePick(
       "An outcome cannot be resolved before the pick was committed.",
     );
   }
+
+  // Ask the independent provider before writing anything. A contradicted claim is stored
+  // as contradicted rather than rejected, so the record shows what was claimed and what
+  // actually happened side by side.
+  const oracle = await consultOracle(row.pick, input.result);
   const probability = impliedProbability(row.pick.odds);
   const brier = brierScore(probability, input.result);
 
@@ -92,6 +211,12 @@ export async function resolvePick(
         resolvedBy: `user:${userId}`,
         sourceUrl: input.sourceUrl,
         resolvedAt: new Date(resolvedAt),
+        verification: oracle.verification,
+        oracleResult: oracle.oracleResult,
+        oracleSource: oracle.oracleSource,
+        oracleEventId: oracle.oracleEventId,
+        oracleNote: oracle.oracleNote,
+        verifiedAt: oracle.verifiedAt,
         ...(input.payoutUnits === undefined ? {} : { payoutUnits: input.payoutUnits }),
         brier,
       })
@@ -207,5 +332,7 @@ export async function resolvePick(
     biasBlobId,
     biasPattern,
     sourceRoiBlobIds,
+    oracle: oracle.display,
+    oracleNote: oracle.oracleNote,
   };
 }

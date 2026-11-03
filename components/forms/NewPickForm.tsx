@@ -14,6 +14,28 @@ const responseSchema = z
   })
   .loose();
 
+const fixturesSchema = z
+  .object({
+    leagueLabel: z.string(),
+    fixtures: z.array(
+      z
+        .object({
+          ref: z.string(),
+          homeTeam: z.string(),
+          awayTeam: z.string(),
+          homeScore: z.number().nullable(),
+          awayScore: z.number().nullable(),
+          completed: z.boolean(),
+          statusDetail: z.string(),
+          kickoff: z.string().nullable(),
+        })
+        .loose(),
+    ),
+  })
+  .loose();
+
+type Fixture = z.infer<typeof fixturesSchema>["fixtures"][number];
+
 export interface AnalystOption {
   readonly id: string;
   readonly name: string;
@@ -29,8 +51,45 @@ export function NewPickForm({ analysts }: { readonly analysts: readonly AnalystO
   const [odds, setOdds] = useState("2.10");
   const [stakeUnits, setStakeUnits] = useState("10");
   const [revealAt, setRevealAt] = useState("");
+  const [oracleEventRef, setOracleEventRef] = useState("");
+
+  const [fixtureDate, setFixtureDate] = useState("");
+  const [fixtures, setFixtures] = useState<readonly Fixture[] | null>(null);
+  const [fixtureError, setFixtureError] = useState<string | null>(null);
+  const [fixturePending, setFixturePending] = useState(false);
+
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+
+  async function loadFixtures() {
+    if (fixtureDate.length === 0) {
+      setFixtureError("Pick a date first.");
+      return;
+    }
+    setFixturePending(true);
+    setFixtureError(null);
+    try {
+      const result = await requestJson({
+        url: `/api/oracle/fixtures?date=${encodeURIComponent(fixtureDate)}`,
+        schema: fixturesSchema,
+      });
+      setFixtures(result.fixtures);
+      if (result.fixtures.length === 0) {
+        setFixtureError(`No ${result.leagueLabel} fixtures reported for that date.`);
+      }
+    } catch (caught) {
+      setFixtures(null);
+      setFixtureError(caught instanceof Error ? caught.message : "Could not load fixtures.");
+    } finally {
+      setFixturePending(false);
+    }
+  }
+
+  function chooseFixture(fixture: Fixture) {
+    setOracleEventRef(fixture.ref);
+    setEventRef(fixture.ref);
+    setMarket((current) => (current.trim().length > 0 ? current : "Premier League · Match winner"));
+  }
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -48,6 +107,7 @@ export function NewPickForm({ analysts }: { readonly analysts: readonly AnalystO
           odds: Number(odds),
           stakeUnits: Number(stakeUnits),
           ...(revealAt.length === 0 ? {} : { revealAt: new Date(revealAt).toISOString() }),
+          ...(oracleEventRef.length === 0 ? {} : { oracleEventRef }),
         },
         schema: responseSchema,
       });
@@ -124,6 +184,95 @@ export function NewPickForm({ analysts }: { readonly analysts: readonly AnalystO
             required
           />
         </div>
+      </div>
+
+      <div className="border-line rounded-xl border p-4">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className="mono text-amber text-[10px] tracking-[0.18em] uppercase">
+              Independent result (optional)
+            </p>
+            <p className="text-muted mt-1 text-xs leading-relaxed">
+              Link the fixture from a provider Saksi does not control. Only linked picks can be
+              marked oracle-verified; unlinked ones stay self-attested and are labelled that way.
+            </p>
+          </div>
+          {oracleEventRef.length > 0 ? (
+            <button
+              type="button"
+              className="mono text-muted hover:text-paper text-[10px] tracking-[0.12em] uppercase"
+              onClick={() => setOracleEventRef("")}
+            >
+              clear link
+            </button>
+          ) : null}
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-end gap-3">
+          <div>
+            <label className="label" htmlFor="fixture-date">
+              Fixture date
+            </label>
+            <input
+              id="fixture-date"
+              className="input"
+              type="date"
+              value={fixtureDate}
+              onChange={(event) => setFixtureDate(event.target.value)}
+            />
+          </div>
+          <button
+            type="button"
+            className="btn btn-ghost h-10 text-xs"
+            onClick={loadFixtures}
+            disabled={fixturePending}
+          >
+            {fixturePending ? "Reading provider…" : "Find fixtures"}
+          </button>
+        </div>
+
+        {fixtureError ? <p className="text-muted mt-3 text-xs">{fixtureError}</p> : null}
+
+        {fixtures !== null && fixtures.length > 0 ? (
+          <ul className="mt-3 space-y-2">
+            {fixtures.map((fixture) => {
+              const chosen = fixture.ref === oracleEventRef;
+              return (
+                <li key={fixture.ref}>
+                  <button
+                    type="button"
+                    onClick={() => chooseFixture(fixture)}
+                    className={`flex w-full flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left text-xs transition-colors ${
+                      chosen
+                        ? "border-amber/50 bg-amber/10 text-paper"
+                        : "border-line text-muted hover:text-paper hover:border-white/20"
+                    }`}
+                  >
+                    <span>
+                      {fixture.homeTeam}
+                      {fixture.homeScore === null ? "" : ` ${fixture.homeScore}`}
+                      {" – "}
+                      {fixture.awayScore === null ? "" : `${fixture.awayScore} `}
+                      {fixture.awayTeam}
+                    </span>
+                    <span className="mono text-[10px] tracking-[0.1em] uppercase">
+                      {fixture.statusDetail} · {fixture.ref}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        ) : null}
+
+        {oracleEventRef.length > 0 ? (
+          <p className="mono text-green mt-3 text-[11px] break-all">linked {oracleEventRef}</p>
+        ) : (
+          <p className="text-muted mt-3 text-xs leading-relaxed">
+            No fixture linked. This pick will resolve as self-attested and will not count toward a
+            verified record.
+          </p>
+        )}
       </div>
 
       <div>

@@ -20,6 +20,13 @@ export const SESSION_COOKIE = "saksi_user";
 export const USDC_DECIMALS = 6;
 
 /**
+ * Sui only treats a stablecoin settlement as gasless at or above this amount. Below it the
+ * transaction needs a gas budget the sponsored flow does not provide, so the network
+ * rejects it outright. Measured against mainnet, not assumed: see docs/IMPLEMENTATION.md.
+ */
+export const GASLESS_MIN_ATOMIC = 10_000n;
+
+/**
  * Decimal odds at or above this value are treated as an underdog pick by the bias
  * model. Product rule, not an environment concern.
  */

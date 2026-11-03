@@ -2,15 +2,20 @@ import Link from "next/link";
 
 import type { PickView } from "@/server/presenters/pick";
 import { formatOdds } from "@/lib/format";
-import { Hash, OutcomeBadge, StatusBadge, Timestamp } from "@/components/ui";
+import { Hash, OutcomeBadge, StatusBadge, Timestamp, VerificationBadge } from "@/components/ui";
 
 export function PickCard({ pick }: { readonly pick: PickView }) {
   return (
     <article className="card p-5 transition-colors hover:border-white/20">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <StatusBadge status={pick.status} />
           {pick.outcome ? <OutcomeBadge result={pick.outcome.result} /> : null}
+          {pick.outcome ? (
+            <VerificationBadge verification={pick.outcome.verification} />
+          ) : pick.oracleLinked ? (
+            <span className="badge badge-neutral">oracle-linked</span>
+          ) : null}
           {pick.isOwner ? <span className="badge badge-neutral">your journal</span> : null}
         </div>
         <Timestamp value={pick.committedAt} />

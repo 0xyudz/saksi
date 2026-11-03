@@ -52,6 +52,73 @@ export interface WalletPaymentResult {
   readonly memoryBlobIds: readonly string[];
 }
 
+const publishedSignalSchema = z
+  .object({
+    signal: z
+      .object({
+        id: z.string(),
+        title: z.string(),
+        provider: z.string(),
+        externalRef: z.string(),
+        priceAtomic: z.string(),
+        payToAddress: z.string().nullable(),
+        createdAt: z.string(),
+      })
+      .loose(),
+    listingFee: z
+      .object({
+        digest: z.string(),
+        amountAtomic: z.string(),
+        explorerUrl: z.string().url(),
+      })
+      .loose(),
+  })
+  .loose();
+
+export type PublishedSignalResult = z.infer<typeof publishedSignalSchema>;
+
+/**
+ * Pays the platform's listing fee and publishes the signal in one round trip.
+ *
+ * The payment is a plain x402 `exact` settlement to a single recipient — the platform —
+ * which is what makes it possible at all: Sui's gasless mode only permits
+ * `balance::send_funds` and rejects every coin-splitting command, so a fee cannot be
+ * carved out of the buyer's payment. Charging the seller separately keeps both payments
+ * honest and keeps Saksi out of custody.
+ */
+export async function publishSignalWithWallet(input: {
+  readonly body: {
+    readonly title: string;
+    readonly externalRef: string;
+    readonly priceAtomic: string;
+    readonly payload: Record<string, unknown>;
+  };
+  readonly signer: ClientSuiSigner;
+}): Promise<PublishedSignalResult> {
+  const url = new URL("/api/signals", window.location.origin);
+
+  const allowedAssets = await allowedAssetsFromChallenge(url, "POST");
+  const client = x402Client.fromConfig({
+    schemes: [{ network: X402_NETWORK, client: new ExactSuiScheme(input.signer) }],
+    spendControls: { allowedAssets: [...allowedAssets] },
+  });
+  const fetchWithPayment = wrapFetchWithPayment(fetch, client);
+
+  const response = await fetchWithPayment(url, {
+    method: "POST",
+    headers: { accept: "application/json", "content-type": "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify(input.body),
+  });
+
+  if (!response.ok) throw new Error(await failureMessage(response));
+
+  const body: unknown = await response.json().catch(() => null);
+  const parsed = publishedSignalSchema.safeParse(body);
+  if (!parsed.success) throw new Error("The listing endpoint returned an unexpected body.");
+  return parsed.data;
+}
+
 async function failureMessage(response: Response): Promise<string> {
   const text = await response.text().catch(() => "");
   if (text.length > 0) {
@@ -73,9 +140,12 @@ async function failureMessage(response: Response): Promise<string> {
  * non-default asset unless it is listed in `spendControls.allowedAssets`, so read the
  * challenge first and allow exactly the network, asset and amount the seller asked for.
  */
-async function allowedAssetsFromChallenge(url: URL): Promise<readonly SpendControlAsset[]> {
+async function allowedAssetsFromChallenge(
+  url: URL,
+  method: "GET" | "POST" = "GET",
+): Promise<readonly SpendControlAsset[]> {
   const response = await fetch(url, {
-    method: "GET",
+    method,
     headers: { accept: "application/json" },
     credentials: "same-origin",
   });

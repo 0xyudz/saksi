@@ -1,6 +1,9 @@
 import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
 import { z } from "zod";
 
+import { GASLESS_MIN_ATOMIC } from "./config";
+import { formatAtomic, parsePriceToAtomic } from "./price";
+
 const nonEmpty = z.string().min(1);
 const httpUrl = z.string().url();
 
@@ -37,28 +40,35 @@ const envSchema = z
     TATUM_VERIFY_DIGEST: nonEmpty.optional(),
 
     X402_FACILITATOR_URL: httpUrl,
+    /**
+     * The platform's own address. Two distinct jobs: it receives the listing fee a seller
+     * pays to publish, and it is the fallback recipient for catalogue signals that have no
+     * seller. It is never an intermediary for a sale — buyers pay the seller directly.
+     */
     X402_PAY_TO_ADDRESS: suiAddress,
     X402_PRICE: price.default("$0.01"),
+    /**
+     * What a seller pays to publish one signal. Charged as its own x402 settlement before
+     * the listing becomes visible, which is what makes the fee enforceable without Saksi
+     * holding anyone's money. Must be at least the Sui gasless minimum (0.01 USDC) or the
+     * settlement cannot be sponsored.
+     */
+    X402_LISTING_FEE: price.default("$0.02"),
     /** Only `pnpm verify:x402` needs the key; the browser signs purchases with the user's wallet. */
     X402_CLIENT_PRIVATE_KEY: nonEmpty.optional(),
     X402_TEST_SIGNAL_ID: z.string().uuid().optional(),
 
-    SIGNAL_PROVIDER_API_URL: httpUrl.optional(),
-    SIGNAL_PROVIDER_API_KEY: nonEmpty.optional(),
     /**
-     * Comma-separated journal handles allowed to ingest provider signals. Ingest spends the
-     * operator's provider quota and writes to the shared signal catalogue, so it is not a
-     * feature for every visitor. Empty or unset disables ingestion entirely.
+     * Base URL of the independent results provider used to verify outcomes. Saksi reads
+     * final scores from here and refuses to mark a pick oracle-verified when the provider
+     * disagrees, so the value of a seller's record does not rest on their own claim.
      */
-    OPERATOR_HANDLES: z
-      .string()
-      .default("")
-      .transform((value) =>
-        value
-          .split(",")
-          .map((handle) => handle.trim().toLowerCase())
-          .filter((handle) => handle.length > 0),
-      ),
+    ORACLE_ESPN_BASE_URL: httpUrl.default("https://site.api.espn.com/apis/site/v2/sports"),
+    /** Disables oracle verification entirely, leaving every outcome self-attested. */
+    ORACLE_ENABLED: z
+      .enum(["true", "false"])
+      .default("true")
+      .transform((value) => value === "true"),
 
     APP_BASE_URL: httpUrl,
     SESSION_SECRET: z.string().min(32, "SESSION_SECRET must be at least 32 characters"),
@@ -71,16 +81,6 @@ const envSchema = z
     DB_POOL_MAX: z.coerce.number().int().min(1).max(50).default(10),
   })
   .superRefine((value, ctx) => {
-    const hasUrl = value.SIGNAL_PROVIDER_API_URL !== undefined;
-    const hasKey = value.SIGNAL_PROVIDER_API_KEY !== undefined;
-    if (hasUrl !== hasKey) {
-      ctx.addIssue({
-        code: "custom",
-        path: hasUrl ? ["SIGNAL_PROVIDER_API_KEY"] : ["SIGNAL_PROVIDER_API_URL"],
-        message: "SIGNAL_PROVIDER_API_URL and SIGNAL_PROVIDER_API_KEY must be set together",
-      });
-    }
-
     const rpcHost = new URL(value.TATUM_SUI_RPC_URL).hostname.toLowerCase();
     const expectedNetwork = value.SUI_NETWORK === "sui:mainnet" ? "mainnet" : "testnet";
     if (!rpcHost.includes(expectedNetwork)) {
@@ -110,9 +110,39 @@ const envSchema = z
         });
       }
     }
+
+    /**
+     * Sui only sponsors gas for settlements at or above this threshold. A price below it
+     * would build a sponsored transaction the network rejects with `InsufficientGas`, so
+     * the misconfiguration is caught at startup rather than by the first buyer or seller
+     * who tries to settle.
+     */
+    for (const [field, raw] of [
+      ["X402_PRICE", value.X402_PRICE],
+      ["X402_LISTING_FEE", value.X402_LISTING_FEE],
+    ] as const) {
+      const atomic = parsePriceToAtomic(raw);
+      if (atomic < GASLESS_MIN_ATOMIC) {
+        ctx.addIssue({
+          code: "custom",
+          path: [field],
+          message: `must be at least ${formatAtomic(GASLESS_MIN_ATOMIC)} USDC, the Sui gasless minimum`,
+        });
+      }
+    }
   });
 
 export type Env = z.infer<typeof envSchema>;
+
+/** The listing fee in atomic units, derived from the configured USD string. */
+export function listingFeeAtomic(env: Env = getEnv()): bigint {
+  return parsePriceToAtomic(env.X402_LISTING_FEE);
+}
+
+/** The catalogue fallback price in atomic units. */
+export function signalPriceAtomic(env: Env = getEnv()): bigint {
+  return parsePriceToAtomic(env.X402_PRICE);
+}
 
 let cached: Env | undefined;
 

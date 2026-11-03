@@ -1,0 +1,1 @@
+ALTER TABLE "wallet_challenges" ADD COLUMN "message" text NOT NULL;

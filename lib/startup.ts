@@ -11,7 +11,7 @@ export function assertStartupEnvironment(): void {
   getLogger().info(
     {
       suiNetwork: env.SUI_NETWORK,
-      signalProvider: env.SIGNAL_PROVIDER_API_URL === undefined ? "disabled" : "configured",
+      oracle: env.ORACLE_ENABLED ? "enabled" : "disabled",
       recallLimit: env.WALRUS_RECALL_LIMIT,
     },
     "environment validated",

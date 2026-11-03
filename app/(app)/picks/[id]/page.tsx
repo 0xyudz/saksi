@@ -3,7 +3,14 @@ import { notFound } from "next/navigation";
 
 import { RevealButton } from "@/components/forms/RevealButton";
 import { ResolveForm } from "@/components/forms/ResolveForm";
-import { Hash, OutcomeBadge, PageHeader, ProofLine, StatusBadge } from "@/components/ui";
+import {
+  Hash,
+  OutcomeBadge,
+  PageHeader,
+  ProofLine,
+  StatusBadge,
+  VerificationBadge,
+} from "@/components/ui";
 import { formatDate, formatDateTime, formatOdds, formatPercent } from "@/lib/format";
 import { isUuid } from "@/lib/ids";
 import { getSessionUser } from "@/lib/session";
@@ -43,6 +50,9 @@ export default async function PickDetailPage({ params }: { params: Promise<{ id:
             resolvedBy: detail.outcome.resolvedBy,
             brier: detail.outcome.brier,
             payoutUnits: detail.outcome.payoutUnits,
+            verification: detail.outcome.verification,
+            oracleResult: detail.outcome.oracleResult,
+            oracleNote: detail.outcome.oracleNote,
           },
   });
 
@@ -92,6 +102,10 @@ export default async function PickDetailPage({ params }: { params: Promise<{ id:
                 label="Stored payload matches hash"
                 value={commitmentValid ? "yes" : "NO — reveal refused"}
                 mono={false}
+              />
+              <ProofLine
+                label="Independent fixture"
+                value={detail.pick.oracleEventRef ?? "not linked (self-attested only)"}
               />
             </div>
             {!commitmentValid ? (
@@ -153,8 +167,8 @@ export default async function PickDetailPage({ params }: { params: Promise<{ id:
                   Resolution
                 </p>
                 <div className="flex flex-wrap items-center justify-end gap-2">
-                  {view.outcome.selfAttested ? (
-                    <span className="badge badge-neutral">Self-attested outcome</span>
+                  {view.outcome ? (
+                    <VerificationBadge verification={view.outcome.verification} />
                   ) : null}
                   <OutcomeBadge result={view.outcome.result} />
                 </div>
@@ -166,12 +180,24 @@ export default async function PickDetailPage({ params }: { params: Promise<{ id:
                     ? "Missed."
                     : "Voided."}
               </p>
-              {view.outcome.selfAttested ? (
+              {view.outcome.verification === "oracle_verified" ? (
                 <p className="text-muted mt-2 text-xs leading-relaxed">
-                  The pick owner supplied this result and source URL. Saksi verifies the commitment
-                  hash, not the truth of the cited source.
+                  An independent results provider confirmed this outcome. It counts toward the
+                  analyst&apos;s verified record.
                 </p>
-              ) : null}
+              ) : view.outcome.verification === "oracle_contradicted" ? (
+                <p className="border-red/30 bg-red/10 text-red mt-2 rounded-xl border p-3 text-xs leading-relaxed">
+                  {view.outcome.oracleNote ?? "The independent provider disagreed with this claim."}{" "}
+                  The owner&apos;s claim is preserved here, but it does not count toward a verified
+                  record.
+                </p>
+              ) : (
+                <p className="text-muted mt-2 text-xs leading-relaxed">
+                  No independent provider confirmed this result, so it counts as self-attested and
+                  is excluded from the verified record.
+                  {view.outcome.oracleNote ? ` ${view.outcome.oracleNote}` : ""}
+                </p>
+              )}
               <div className="mt-3">
                 <ProofLine label="Resolved at" value={formatDateTime(view.outcome.resolvedAt)} />
                 <ProofLine

@@ -1,21 +1,47 @@
 "use client";
 
+import { useCurrentAccount, useDAppKit } from "@mysten/dapp-kit-react";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { z } from "zod";
 
+import { WalletMenu } from "@/components/WalletMenu";
 import { requestJson } from "@/lib/client-api";
 import { formatRecoveryCode } from "@/lib/recovery-format";
 
-const responseSchema = z
+const challengeSchema = z
+  .object({
+    challenge: z
+      .object({
+        nonce: z.string(),
+        address: z.string(),
+        message: z.string(),
+        expiresAt: z.string(),
+      })
+      .loose(),
+  })
+  .loose();
+
+const claimSchema = z
   .object({
     user: z.object({ id: z.string(), handle: z.string() }).loose(),
     recoveryCode: z.string().min(1),
   })
   .loose();
 
+/**
+ * Claiming a handle requires a wallet signature over a message Saksi issued.
+ *
+ * The address becomes part of the journal's identity: it is where buyers pay, and it is
+ * unique across all journals. Accepting it without proof would let anyone register a
+ * wallet they do not control, so the form always issues a challenge first, asks the
+ * wallet to sign the exact bytes the server will verify, and only then creates the row.
+ */
 export function OnboardingForm() {
   const router = useRouter();
+  const account = useCurrentAccount();
+  const dAppKit = useDAppKit();
+
   const [handle, setHandle] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -27,15 +53,39 @@ export function OnboardingForm() {
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!account) {
+      setError("Connect a Sui wallet first: your handle is bound to the address you prove.");
+      return;
+    }
+
     setPending(true);
     setError(null);
     try {
+      const challenge = await requestJson({
+        url: "/api/session",
+        method: "PUT",
+        body: { address: account.address, purpose: "claim", subject: handle.trim() },
+        schema: challengeSchema,
+      });
+
+      // Sign exactly the message the server stored, never a locally rebuilt copy.
+      const signed = await dAppKit.signPersonalMessage({
+        message: new TextEncoder().encode(challenge.challenge.message),
+        network: "mainnet",
+      });
+
       const result = await requestJson({
         url: "/api/session",
         method: "POST",
-        body: { handle: handle.trim() },
-        schema: responseSchema,
+        body: {
+          handle: handle.trim(),
+          address: challenge.challenge.address,
+          nonce: challenge.challenge.nonce,
+          signature: signed.signature,
+        },
+        schema: claimSchema,
       });
+
       setCreated({ handle: result.user.handle, recoveryCode: result.recoveryCode });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not start the journal.");
@@ -55,9 +105,9 @@ export function OnboardingForm() {
           </p>
           <h3 className="display mt-2 text-2xl">Save your recovery code</h3>
           <p className="text-muted mt-2 text-xs leading-relaxed">
-            There is no password and no email on Saksi. This code is the{" "}
-            <strong className="text-paper">only</strong> way back into this journal after you log
-            out or clear your cookies. It is shown once and cannot be recovered.
+            Your wallet is now the way in. This code is the{" "}
+            <strong className="text-paper">only</strong> fallback if that wallet is lost or
+            replaced. It is shown once and cannot be recovered.
           </p>
         </div>
 
@@ -105,8 +155,25 @@ export function OnboardingForm() {
   return (
     <form onSubmit={onSubmit} className="space-y-4">
       <div>
+        <p className="label">Step 1 — Prove a Sui wallet</p>
+        {account ? (
+          <p className="border-green/30 bg-green/5 text-green mono mt-2 rounded-xl border px-3 py-2 text-[11px] break-all">
+            {account.address}
+          </p>
+        ) : (
+          <div className="mt-2 space-y-3">
+            <p className="text-muted text-xs leading-relaxed">
+              Your address is where buyers pay you, so it must be proven by a signature. Saksi only
+              asks you to sign a message; it authorises no payment and moves no funds.
+            </p>
+            <WalletMenu />
+          </div>
+        )}
+      </div>
+
+      <div>
         <label className="label" htmlFor="handle">
-          Journal handle
+          Step 2 — Journal handle
         </label>
         <div className="flex items-center gap-2">
           <span className="mono text-muted text-sm">@</span>
@@ -125,8 +192,8 @@ export function OnboardingForm() {
           />
         </div>
         <p className="text-muted mt-2 text-xs leading-relaxed">
-          Lowercase letters, numbers and underscores. This handle is written into your memories and
-          cannot be changed later.
+          Lowercase letters, numbers and underscores. One wallet claims one handle, and the handle
+          is written into your memories.
         </p>
       </div>
 
@@ -136,8 +203,8 @@ export function OnboardingForm() {
         </p>
       ) : null}
 
-      <button type="submit" className="btn btn-primary w-full" disabled={pending}>
-        {pending ? "Opening journal…" : "Open my journal"}
+      <button type="submit" className="btn btn-primary w-full" disabled={pending || !account}>
+        {pending ? "Waiting for your signature…" : "Sign & open my journal"}
       </button>
 
       <p className="text-muted border-line border-t pt-4 text-center text-xs">

@@ -1,5 +1,12 @@
 import type { AnalystKind, OutcomeResult, PickStatus } from "@/lib/domain";
 
+/**
+ * How an outcome came to exist. `self_attested` means the owner supplied it; the other two
+ * mean an independent results provider agreed or disagreed. Only `oracle_verified` counts
+ * toward a seller's verified record, so the distinction must survive all the way to the UI.
+ */
+export type OutcomeVerification = "self_attested" | "oracle_verified" | "oracle_contradicted";
+
 export interface PresentableOutcome {
   readonly result: OutcomeResult;
   readonly resolvedAt: Date;
@@ -7,6 +14,9 @@ export interface PresentableOutcome {
   readonly resolvedBy: string;
   readonly brier: number | null;
   readonly payoutUnits?: number | null;
+  readonly verification?: OutcomeVerification;
+  readonly oracleResult?: OutcomeResult | null;
+  readonly oracleNote?: string | null;
 }
 
 export interface PresentablePick {
@@ -21,6 +31,8 @@ export interface PresentablePick {
   readonly commitmentHash: string;
   readonly committedAt: Date;
   readonly revealAt: Date | null;
+  /** Independent fixture fixed at seal time, if the owner linked one. */
+  readonly oracleEventRef?: string | null;
 }
 
 export interface PickView {
@@ -45,12 +57,17 @@ export interface PickView {
     readonly sourceUrl: string;
     readonly resolvedBy: string;
     readonly selfAttested: boolean;
+    readonly verification: OutcomeVerification;
+    readonly oracleResult: OutcomeResult | null;
+    readonly oracleNote: string | null;
     readonly brier: number | null;
     readonly payoutUnits: number | null;
   } | null;
   readonly canReveal: boolean;
   readonly canResolve: boolean;
   readonly revealBlockedReason: string | null;
+  /** Whether this pick was linked to an independent fixture at seal time. */
+  readonly oracleLinked: boolean;
 }
 
 /**
@@ -101,6 +118,9 @@ export function presentPick(input: {
             sourceUrl: input.outcome.sourceUrl,
             resolvedBy: input.outcome.resolvedBy,
             selfAttested: input.outcome.resolvedBy.startsWith("user:"),
+            verification: input.outcome.verification ?? "self_attested",
+            oracleResult: input.outcome.oracleResult ?? null,
+            oracleNote: input.outcome.oracleNote ?? null,
             brier: input.outcome.brier,
             payoutUnits: input.outcome.payoutUnits ?? null,
           },
@@ -109,5 +129,6 @@ export function presentPick(input: {
     revealBlockedReason: revealWait
       ? `The commitment is time-locked until ${pick.revealAt?.toISOString() ?? "the reveal time"}.`
       : null,
+    oracleLinked: (pick.oracleEventRef ?? null) !== null,
   };
 }

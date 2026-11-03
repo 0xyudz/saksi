@@ -54,6 +54,12 @@ export async function AppNav() {
           {user ? (
             <>
               <span className="mono text-muted hidden text-xs sm:inline">@{user.handle}</span>
+              <Link
+                href="/settings/wallet"
+                className="mono text-muted hover:text-paper hidden text-[10px] tracking-[0.12em] uppercase sm:inline"
+              >
+                {user.walletAddress === null ? "bind wallet" : "wallet"}
+              </Link>
               <LogoutButton hasRecovery={user.hasRecovery} />
               <Link href="/picks/new" className="btn btn-primary h-9 px-4 text-xs">
                 Seal a pick

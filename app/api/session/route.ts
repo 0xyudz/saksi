@@ -1,35 +1,18 @@
-import { cookies } from "next/headers";
+import { z } from "zod";
 
-import { SESSION_COOKIE } from "@/lib/config";
-import { getEnv } from "@/lib/env";
 import { assertSessionOrigin, handleRoute, jsonResponse, parseJsonBody } from "@/lib/http";
 import { assertWithinRateLimit } from "@/lib/rate-limit";
-import { getSessionUser } from "@/lib/session";
-import { signSession } from "@/lib/session-cookie";
+import { clearSession, getSessionUser, startSession } from "@/lib/session";
 import {
-  createUser,
-  createUserSchema,
+  claimJournal,
+  claimJournalSchema,
   resumeSchema,
   resumeUser,
   type CreatedUser,
 } from "@/server/data/users";
+import { issueWalletChallenge, WALLET_CHALLENGE_PURPOSES } from "@/server/wallet-auth";
 
 export const dynamic = "force-dynamic";
-
-const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 365;
-
-async function startSession(userId: string): Promise<void> {
-  const store = await cookies();
-  store.set({
-    name: SESSION_COOKIE,
-    value: signSession(userId, getEnv().SESSION_SECRET),
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: SESSION_MAX_AGE_SECONDS,
-  });
-}
 
 export async function GET(request: Request): Promise<Response> {
   return handleRoute(request, async ({ requestId }) => {
@@ -38,16 +21,63 @@ export async function GET(request: Request): Promise<Response> {
   });
 }
 
+const challengeSchema = z.object({
+  address: z.string().trim().min(1).max(80),
+  purpose: z.enum(WALLET_CHALLENGE_PURPOSES),
+  subject: z.string().trim().min(1).max(80).optional(),
+});
+
+/**
+ * Issues the message a wallet must sign. This endpoint writes nothing except a
+ * single-use nonce, so it is safe to call before any identity is established.
+ */
+export async function PUT(request: Request): Promise<Response> {
+  return handleRoute(request, async ({ requestId }) => {
+    assertSessionOrigin(request);
+    assertWithinRateLimit(request, "session:challenge", 30, 60_000);
+    const input = await parseJsonBody(request, challengeSchema);
+
+    const challenge = await issueWalletChallenge({
+      address: input.address,
+      purpose: input.purpose,
+      subject: input.subject ?? null,
+    });
+
+    return jsonResponse(
+      {
+        challenge: {
+          nonce: challenge.nonce,
+          address: challenge.address,
+          purpose: challenge.purpose,
+          subject: challenge.subject,
+          message: challenge.message,
+          expiresAt: challenge.expiresAt,
+        },
+      },
+      requestId,
+    );
+  });
+}
+
+/**
+ * Creates a journal from a proven wallet. The recovery code is returned exactly once and
+ * is the only fallback if the wallet is later lost.
+ */
 export async function POST(request: Request): Promise<Response> {
   return handleRoute(request, async ({ requestId }) => {
     assertSessionOrigin(request);
-    const input = await parseJsonBody(request, createUserSchema);
-    const created: CreatedUser = await createUser(input);
+    assertWithinRateLimit(request, "session:claim", 10, 60_000);
+    const input = await parseJsonBody(request, claimJournalSchema);
+    const created: CreatedUser = await claimJournal(input);
     await startSession(created.user.id);
 
     return jsonResponse(
       {
-        user: { id: created.user.id, handle: created.user.handle },
+        user: {
+          id: created.user.id,
+          handle: created.user.handle,
+          walletAddress: created.user.walletAddress,
+        },
         // Shown once. There is no endpoint that can reveal it again, by design.
         recoveryCode: created.recoveryCode,
       },
@@ -66,15 +96,19 @@ export async function PATCH(request: Request): Promise<Response> {
     const user = await resumeUser(input);
     await startSession(user.id);
 
-    return jsonResponse({ user: { id: user.id, handle: user.handle } }, requestId);
+    return jsonResponse(
+      {
+        user: { id: user.id, handle: user.handle, walletAddress: user.walletAddress },
+      },
+      requestId,
+    );
   });
 }
 
 export async function DELETE(request: Request): Promise<Response> {
   return handleRoute(request, async ({ requestId }) => {
     assertSessionOrigin(request);
-    const store = await cookies();
-    store.delete(SESSION_COOKIE);
+    await clearSession();
     return jsonResponse({ ok: true }, requestId);
   });
 }

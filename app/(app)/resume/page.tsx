@@ -1,7 +1,9 @@
+import { redirect } from "next/navigation";
+
 import { ResumeForm } from "@/components/forms/ResumeForm";
+import { WalletLoginForm } from "@/components/forms/WalletLoginForm";
 import { APP_NAME } from "@/lib/config";
 import { getSessionUser } from "@/lib/session";
-import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
@@ -21,18 +23,17 @@ export default async function ResumePage() {
           remembers you.
         </h1>
         <p className="text-muted mt-6 max-w-lg text-[15px] leading-relaxed">
-          {APP_NAME} has no passwords and no email, so logging back in takes the recovery code you
-          were given when you created the journal. It proves the journal is yours without asking a
-          server to trust a name alone.
+          {APP_NAME} has no passwords and no email. Sign back in with the wallet bound to your
+          journal, or fall back to the recovery code you saved when you claimed your handle.
         </p>
         <ul className="text-muted mt-8 space-y-3 text-sm">
           <li className="flex gap-3">
             <span className="mono text-amber">01</span>
-            <span>The code is stored only as a scrypt hash; nobody can read it back.</span>
+            <span>One wallet maps to exactly one handle, enforced by a unique index.</span>
           </li>
           <li className="flex gap-3">
             <span className="mono text-amber">02</span>
-            <span>A wrong handle and a wrong code fail with the same message.</span>
+            <span>The recovery code is stored only as a scrypt hash; nobody can read it back.</span>
           </li>
           <li className="flex gap-3">
             <span className="mono text-amber">03</span>
@@ -41,14 +42,26 @@ export default async function ResumePage() {
         </ul>
       </div>
 
-      <div className="card p-6 sm:p-8">
-        <p className="mono text-muted text-[10px] tracking-[0.18em] uppercase">Existing journal</p>
-        <h2 className="display mt-3 text-3xl">Resume access</h2>
-        <p className="text-muted mt-2 mb-6 text-xs leading-relaxed">
-          This restores the same session cookie you had before logging out. Your picks, memories and
-          payments are untouched.
-        </p>
-        <ResumeForm />
+      <div className="space-y-6">
+        <div className="card p-6 sm:p-8">
+          <p className="mono text-muted text-[10px] tracking-[0.18em] uppercase">Wallet</p>
+          <h2 className="display mt-3 text-3xl">Sign in with your wallet</h2>
+          <p className="text-muted mt-2 mb-6 text-xs leading-relaxed">
+            The fastest path. Saksi asks for one signature over a login challenge, which cannot be
+            reused for any other action.
+          </p>
+          <WalletLoginForm />
+        </div>
+
+        <div className="card p-6 sm:p-8">
+          <p className="mono text-muted text-[10px] tracking-[0.18em] uppercase">Fallback</p>
+          <h2 className="display mt-3 text-3xl">Recovery code</h2>
+          <p className="text-muted mt-2 mb-6 text-xs leading-relaxed">
+            Use this if the wallet is lost or replaced. It restores the same session cookie you had
+            before logging out.
+          </p>
+          <ResumeForm />
+        </div>
       </div>
     </div>
   );

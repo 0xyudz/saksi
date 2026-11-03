@@ -1,7 +1,14 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { EmptyState, OutcomeBadge, PageHeader, StatCard, StatusBadge } from "@/components/ui";
+import {
+  EmptyState,
+  OutcomeBadge,
+  PageHeader,
+  StatCard,
+  StatusBadge,
+  VerificationBadge,
+} from "@/components/ui";
 import { formatDateTime, formatOdds, formatPercent } from "@/lib/format";
 import { isUuid } from "@/lib/ids";
 import { getSessionUser } from "@/lib/session";
@@ -39,6 +46,10 @@ export default async function AnalystDetailPage({ params }: { params: Promise<{ 
   const communityAttested = samples.filter((sample) =>
     sample.outcome.resolvedBy.startsWith("user:"),
   ).length;
+  const oracleVerified = samples.filter((sample) => sample.outcome.verified).length;
+  const contradicted = samples.filter(
+    (sample) => sample.outcome.verification === "oracle_contradicted",
+  ).length;
 
   const calibration = calibrationBins(
     samples.flatMap((sample) =>
@@ -74,6 +85,16 @@ export default async function AnalystDetailPage({ params }: { params: Promise<{ 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard label="Credibility" value={credibility.score} detail="0–100" tone="green" />
           <StatCard
+            label="Verified score"
+            value={credibility.verifiedScore}
+            detail={
+              credibility.hasVerifiedEvidence
+                ? `${credibility.verifiedResolved} oracle-confirmed`
+                : "no oracle-confirmed outcome"
+            }
+            tone={credibility.hasVerifiedEvidence ? "amber" : "paper"}
+          />
+          <StatCard
             label="Win rate"
             value={formatPercent(credibility.winRate, 1)}
             detail={`${credibility.wins}W · ${credibility.losses}L · ${credibility.voids}V`}
@@ -84,20 +105,37 @@ export default async function AnalystDetailPage({ params }: { params: Promise<{ 
             detail="lower is better"
             tone={credibility.meanBrier !== null && credibility.meanBrier > 0.25 ? "red" : "paper"}
           />
-          <StatCard
-            label="Wilson lower"
-            value={formatPercent(credibility.wilsonLower, 1)}
-            detail="95% bound on accuracy"
-          />
         </div>
 
-        {communityAttested > 0 ? (
-          <p className="text-muted mt-3 text-xs leading-relaxed">
-            <span className="badge badge-neutral mr-2">Community-attested</span>
-            {communityAttested} of {samples.length} resolved samples were supplied by the pick
-            owner, with a source URL rather than an independent oracle.
-          </p>
-        ) : null}
+        <div className="mt-3 space-y-2">
+          {oracleVerified > 0 ? (
+            <p className="text-muted text-xs leading-relaxed">
+              <span className="badge badge-success mr-2">Oracle verified</span>
+              {oracleVerified} of {samples.length} resolved samples were confirmed by an independent
+              results provider. Only these count toward the verified score.
+            </p>
+          ) : (
+            <p className="text-muted text-xs leading-relaxed">
+              <span className="badge badge-neutral mr-2">No verified evidence</span>
+              No resolved pick has been confirmed by an independent provider yet, so the verified
+              score is zero regardless of the headline score.
+            </p>
+          )}
+          {contradicted > 0 ? (
+            <p className="text-muted text-xs leading-relaxed">
+              <span className="badge badge-loss mr-2">Contradicted</span>
+              {contradicted} claim{contradicted === 1 ? " was" : "s were"} contradicted by the
+              provider. The owner&apos;s claim is preserved, but it earns no verified credit.
+            </p>
+          ) : null}
+          {communityAttested > 0 ? (
+            <p className="text-muted text-xs leading-relaxed">
+              <span className="badge badge-neutral mr-2">Self-attested</span>
+              {communityAttested} of {samples.length} resolved samples were supplied by the pick
+              owner, with a source URL rather than an independent oracle.
+            </p>
+          ) : null}
+        </div>
 
         <div className="mt-8 grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
           <section className="card p-6">
@@ -189,6 +227,7 @@ export default async function AnalystDetailPage({ params }: { params: Promise<{ 
                 >
                   <div className="flex items-center gap-3">
                     <OutcomeBadge result={sample.outcome.result} />
+                    <VerificationBadge verification={sample.outcome.verification} />
                     <div>
                       <p className="text-sm">{sample.pick.selection}</p>
                       <p className="mono text-muted text-[10px]">

@@ -9,7 +9,13 @@ import { requestJson } from "@/lib/client-api";
 const responseSchema = z
   .object({
     pick: z.object({ status: z.string() }).loose(),
-    outcome: z.object({ brier: z.number().nullable() }).loose(),
+    outcome: z
+      .object({
+        brier: z.number().nullable(),
+        verification: z.enum(["self_attested", "oracle_verified", "oracle_contradicted"]),
+        oracleNote: z.string().nullable(),
+      })
+      .loose(),
     memory: z.object({ outcomeBlobId: z.string() }).loose(),
   })
   .loose();
@@ -41,8 +47,16 @@ export function ResolveForm({ pickId }: { readonly pickId: string }) {
         },
         schema: responseSchema,
       });
+      // Tell the owner what the provider concluded, not just that the write succeeded.
+      // A contradicted claim is the case they most need to see, so it is named explicitly
+      // instead of being folded into a generic success message.
+      const verification = parsed.outcome.verification;
       setNotice(
-        `Resolved and written to Walrus Memory (blob ${parsed.memory.outcomeBlobId.slice(0, 12)}…).`,
+        verification === "oracle_verified"
+          ? `Resolved and confirmed by the independent provider. Written to Walrus Memory (blob ${parsed.memory.outcomeBlobId.slice(0, 12)}…).`
+          : verification === "oracle_contradicted"
+            ? `Resolved, but the independent provider disagrees. ${parsed.outcome.oracleNote ?? ""} Your claim is kept and marked contradicted; it earns no verified credit. Blob ${parsed.memory.outcomeBlobId.slice(0, 12)}…`
+            : `Resolved as self-attested. ${parsed.outcome.oracleNote ?? "No independent provider confirmed it."} Blob ${parsed.memory.outcomeBlobId.slice(0, 12)}…`,
       );
       router.refresh();
     } catch (caught) {

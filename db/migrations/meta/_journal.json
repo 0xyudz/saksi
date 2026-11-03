@@ -22,6 +22,27 @@
       "when": 1793617096601,
       "tag": "0002_graceful_vindicator",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1793722082442,
+      "tag": "0003_seller_feature",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793722135367,
+      "tag": "0004_challenge_purpose",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1793722174740,
+      "tag": "0005_challenge_message",
+      "breakpoints": true
     }
   ]
 }

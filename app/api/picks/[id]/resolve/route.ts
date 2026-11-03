@@ -36,7 +36,15 @@ export async function POST(
           sourceUrl: result.outcome.sourceUrl,
           resolvedAt: result.outcome.resolvedAt.toISOString(),
           brier: result.outcome.brier,
+          /**
+           * Whether an independent provider confirmed this claim. Returned so a caller can
+           * tell "the oracle agreed" from "nobody checked" without a second request.
+           */
+          verification: result.outcome.verification,
+          oracleResult: result.outcome.oracleResult,
+          oracleNote: result.outcome.oracleNote,
         },
+        oracle: result.oracle,
         memory: {
           outcomeBlobId: result.outcomeBlobId,
           biasBlobId: result.biasBlobId,

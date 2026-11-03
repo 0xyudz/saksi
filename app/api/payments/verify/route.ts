@@ -8,7 +8,7 @@ import { assertWithinRateLimit } from "@/lib/rate-limit";
 import { optionalApiUserId } from "@/server/auth";
 import { getPaymentByDigest } from "@/server/data/payments";
 import { pickForUser } from "@/server/data/picks";
-import { getSignal } from "@/server/usecases/ingest-signal";
+import { getSignal } from "@/server/usecases/read-signal";
 import { verifyPaymentWithRetry } from "@/server/usecases/purchase-signal";
 
 export const dynamic = "force-dynamic";

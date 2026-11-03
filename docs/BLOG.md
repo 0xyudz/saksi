@@ -8,9 +8,10 @@ thing that actually matters before your next bet: _where have I been wrong befor
 this situation look like those times?_
 
 Saksi is an attempt to build the opposite. You seal a pick before the event, so it cannot be
-edited afterwards. You resolve it with a source URL, so the outcome is on the record. And
-every one of those steps writes a memory to Walrus, so the next decision is made with your
-own history in the room — not with a generic model's opinion of you.
+edited afterwards. You resolve it against a results provider you do not control, so a "win"
+is not just your word. And every one of those steps writes a memory to Walrus, so the next
+decision is made with your own history in the room — not with a generic model's opinion of
+you.
 
 This post covers what it does, how it uses Tatum and Walrus Memory, and what "learning over
 time" actually means in the code.
@@ -26,16 +27,21 @@ A pick moves through four states, and each state is a separate memory write:
 2. **Reveal.** You open the pick. The server re-hashes the stored payload and refuses the
    reveal if the hash no longer matches. Only now does the selection and the odds get
    written.
-3. **Resolve.** You record the result and a source URL. Saksi computes a Brier score from
-   the odds you took and writes the outcome, the source and the score.
+3. **Resolve.** You record the result and a source URL. If the pick was sealed against a real
+   fixture, Saksi re-reads that fixture from an independent provider before writing anything.
+   Agreement stores `oracle_verified`; disagreement stores `oracle_contradicted` and keeps
+   both verdicts. Either way it computes a Brier score from the odds you took and writes the
+   outcome, the provider's score and the score.
 4. **Recommend.** Before your next pick, Saksi recalls your memories and can _change the
    verdict_ based on them.
 
 The hash is the part people underestimate. It proves the pick existed before the event and
-was not edited afterwards. It does **not** prove the outcome is true — outcomes here are
-self-attested, and the UI says so on every card, with the source URL and timestamp the owner
-supplied. That distinction is deliberate. A tamper-evident record of a self-attested claim
-is still useful; pretending it is an oracle would not be.
+was not edited afterwards. It does **not**, by itself, prove the outcome is true — which is
+why the outcome is not self-graded when a fixture is linked. Oracle coverage is deliberately
+narrow: one league (`eng.1`) and match-winner markets. Everything else is labelled
+`self-attested`, with the source URL and timestamp the owner supplied, and contributes
+nothing to a seller's verified score. The boundary is honest on purpose: an oracle that
+silently passed on every other market would look like verification while verifying nothing.
 
 ## How it uses Walrus Memory
 
@@ -70,14 +76,21 @@ not shared between people.
 
 ## How it uses Tatum
 
-Tatum is the read side of the payment story. Premium signals are sold per call through an
-x402 paywall on Sui, and the seller releases the payload only after Tatum confirms the
-settlement on-chain.
+Tatum is the read side of the payment story. Any journal that proves a Sui wallet can sell
+signals per call through an x402 paywall on Sui, and the seller releases the payload only
+after Tatum confirms the settlement on-chain.
+
+Because x402 `exact` pays a single recipient, and Sui's gasless mode only permits
+`balance::send_funds`, a percentage split is not implementable. Saksi charges a flat listing
+fee instead: the seller pays it once to publish, the buyer pays the seller directly, and
+Saksi never holds either payment. The listing stays invisible until the fee digest is
+verified through Tatum, and the digest is unique, so one fee publishes exactly one signal.
 
 The verification is not "did some transaction happen". `verifyPayment` checks all of it:
 
 - the transaction status is `success`,
-- the **recipient** is the configured merchant address,
+- the **recipient** is the wallet recorded on that signal row (the seller), or the platform
+  address for the listing fee,
 - the **coin type** matches the configured USDC type,
 - the **amount** covers the signal's price,
 - the digest has not already been recorded (`payments.digest` is unique),
@@ -169,24 +182,32 @@ reproduce it are in the repo:
 - **Walrus Memory** — relayer `0.1.0`, a fresh write returned blob
   `Y-TFsuMq1956BWInd8F26H62S1ohTI8hxT723DMjckE`, recalled at cosine distance
   `0.35874120150280087`.
-- **Memories on mainnet** — 22 rows across `pick_commit`, `pick_reveal`, `outcome`,
-  `preference`, `payment` and `source_roi`.
-- **Tatum** — checkpoint `340802699`; settlement
+- **Memories on mainnet** — 38 rows across `pick_commit` 12, `pick_reveal` 8, `outcome` 8,
+  `preference` 8, `payment` 1 and `source_roi` 1.
+- **Tatum** — checkpoint `341329560`; settlement
   `DemaKkYM7Ni4mRJcxbth3e4h3BkkqgKnR1MYPdWhmgjq` verified as `success` with 2 balance
   changes.
 - **x402** — one real $0.01 USDC purchase, signed by a self-custody browser wallet, verified
   through Tatum before the payload was released.
+- **Oracle** — eight completed Premier League fixtures on 2026-10-31, each resolving to
+  exactly one winner including two draws; a truthful "Chelsea to win" stored as
+  `oracle_verified`, and a false claim on the same match stored as `oracle_contradicted`
+  with both verdicts kept.
 
-Two honest caveats. The signal behind that purchase is served by a local demo provider and
-is labelled synthetic — it exists to exercise the paywall, not to claim a real forecast was
-sold. And the app is not publicly deployed yet, so settlement `resource.url` values recorded
-before deployment point at `localhost`.
+The honest caveats. The catalogue signal behind that purchase is a synthetic demo payload and
+is labelled as such — it exists to exercise the paywall, not to claim a real forecast was
+sold. Oracle coverage is one league and one market; everything else is labelled
+`self-attested`. No listing has yet been published through the paid flow on mainnet, so the
+listing fee has a verified `402` challenge but no recorded settlement digest. And the app is
+not publicly deployed yet, so settlement `resource.url` values recorded before deployment
+point at `localhost`.
 
 ## What I would build next
 
-The obvious gap is that outcomes are self-attested. The next step is a resolver that reads
-results from an on-chain or API source and compares them against the sealed commitment, so
-the Brier score stops depending on the pick owner's honesty.
+The next step for the oracle is breadth: more leagues and more markets, because the current
+boundary is deliberately one league (`eng.1`) and match-winner selections. That boundary is
+the honest part — widening it without the parsing to match would make every unsupported
+market look verified when it is not.
 
 The second is aggregation: once several journals exist, "which sources were right" becomes a
 question about the population, not one user's memory. Walrus Memory makes that portable in a

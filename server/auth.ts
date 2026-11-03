@@ -2,7 +2,6 @@ import { eq } from "drizzle-orm";
 
 import { getDb } from "@/db/client";
 import { users } from "@/db/schema";
-import { getEnv } from "@/lib/env";
 import { AppError } from "@/lib/errors";
 import { readSessionUserId } from "@/lib/session";
 
@@ -19,44 +18,48 @@ export async function optionalApiUserId(): Promise<string | undefined> {
   return readSessionUserId();
 }
 
+export interface SellerIdentity {
+  readonly userId: string;
+  readonly handle: string;
+  readonly walletAddress: string;
+}
+
 /**
- * Ingest spends the operator's paid provider quota and writes into the shared signal
- * catalogue, so it is restricted to handles listed in `OPERATOR_HANDLES`.
+ * Selling is open to anyone who can prove a wallet, not to a configured list of handles.
  *
- * Without this gate any visitor could create a journal in three seconds and then drive
- * unlimited provider calls. The check is deliberately a 403 rather than a 404: the caller
- * is authenticated, they simply are not an operator.
+ * The gate is a condition rather than a membership: a journal may list signals once it
+ * has bound a wallet by signature, because that address is where buyers pay and a signal
+ * cannot be priced without a destination. Requiring proof rather than an allowlist is
+ * what makes the marketplace open without letting anyone list against someone else's
+ * address.
  */
-export async function requireOperatorUserId(): Promise<string> {
+export async function requireSellerUserId(): Promise<SellerIdentity> {
   const userId = await requireApiUserId();
-  const allowed = getEnv().OPERATOR_HANDLES;
 
   const rows = await getDb()
-    .select({ handle: users.handle })
+    .select({
+      handle: users.handle,
+      walletAddress: users.walletAddress,
+    })
     .from(users)
     .where(eq(users.id, userId))
     .limit(1);
-  const handle = rows[0]?.handle;
-  if (!handle) {
+
+  const row = rows[0];
+  if (!row) {
     throw new AppError("UNAUTHORIZED", "Start a journal before making this request.");
   }
-
-  if (!allowed.includes(handle.toLowerCase())) {
-    throw new AppError("FORBIDDEN", "Ingesting provider signals is limited to operator journals.");
+  if (row.walletAddress === null) {
+    throw new AppError(
+      "FORBIDDEN",
+      "Bind a Sui wallet to this journal before listing signals: buyers pay the seller's wallet directly.",
+    );
   }
-  return userId;
+
+  return { userId, handle: row.handle, walletAddress: row.walletAddress };
 }
 
-/** True when the configured operator list is empty, i.e. ingestion is switched off. */
-export function ingestionEnabled(): boolean {
-  return getEnv().OPERATOR_HANDLES.length > 0;
-}
-
-/**
- * Server-rendered pages need the same rule as `requireOperatorUserId`, but without
- * throwing: a signed-out visitor or a normal journal simply does not see the ingest form
- * instead of being handed a button that always answers 401/403.
- */
-export function isOperatorHandle(handle: string): boolean {
-  return getEnv().OPERATOR_HANDLES.includes(handle.toLowerCase());
+/** Server-rendered pages need the same rule without throwing. */
+export function canSell(walletAddress: string | null): boolean {
+  return walletAddress !== null;
 }

@@ -67,4 +67,65 @@ describe("credibilityBreakdown", () => {
     expect(loser.score).toBeLessThan(winner.score);
     expect(loser.meanBrier).toBeCloseTo(0.8);
   });
+
+  it("reports no verified evidence when nothing was oracle-confirmed", () => {
+    const result = credibilityBreakdown(
+      [
+        { outcome: "win", brier: 0.04, resolvedAt: NOW },
+        { outcome: "win", brier: 0.04, resolvedAt: NOW },
+      ],
+      NOW,
+    );
+
+    expect(result.score).toBeGreaterThan(0);
+    expect(result.verifiedResolved).toBe(0);
+    expect(result.verifiedScore).toBe(0);
+    expect(result.hasVerifiedEvidence).toBe(false);
+  });
+
+  it("scores only oracle-confirmed outcomes as verified", () => {
+    const result = credibilityBreakdown(
+      [
+        { outcome: "win", brier: 0.04, resolvedAt: NOW, verified: true },
+        { outcome: "win", brier: 0.04, resolvedAt: NOW },
+        { outcome: "win", brier: 0.04, resolvedAt: NOW },
+      ],
+      NOW,
+    );
+
+    expect(result.resolved).toBe(3);
+    expect(result.wins).toBe(3);
+    expect(result.verifiedResolved).toBe(1);
+    expect(result.verifiedWins).toBe(1);
+    expect(result.hasVerifiedEvidence).toBe(true);
+    // One confirmed win cannot outrank a longer confirmed record, so the verified score
+    // must stay below the score built from all three.
+    expect(result.verifiedScore).toBeLessThan(result.score);
+  });
+
+  it("keeps a self-graded record from producing a verified score", () => {
+    const selfGraded = credibilityBreakdown(
+      Array.from({ length: 20 }, () => ({ outcome: "win" as const, brier: 0.02, resolvedAt: NOW })),
+      NOW,
+    );
+
+    expect(selfGraded.score).toBeGreaterThan(50);
+    expect(selfGraded.verifiedScore).toBe(0);
+    expect(selfGraded.hasVerifiedEvidence).toBe(false);
+  });
+
+  it("counts a contradicted loss as unverified", () => {
+    const result = credibilityBreakdown(
+      [
+        { outcome: "win", brier: 0.04, resolvedAt: NOW, verified: true },
+        { outcome: "loss", brier: 0.36, resolvedAt: NOW },
+      ],
+      NOW,
+    );
+
+    expect(result.resolved).toBe(2);
+    expect(result.verifiedResolved).toBe(1);
+    expect(result.verifiedWins).toBe(1);
+    expect(result.verifiedLosses).toBe(0);
+  });
 });

@@ -28,7 +28,7 @@ export class ApiRequestError extends Error {
 export async function requestJson<T>(input: {
   readonly url: string;
   readonly schema: z.ZodType<T>;
-  readonly method?: "GET" | "POST" | "PATCH" | "DELETE";
+  readonly method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   readonly body?: unknown;
 }): Promise<T> {
   let response: Response;

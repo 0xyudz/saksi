@@ -12,6 +12,10 @@ export interface AnalystSamples {
     readonly resolvedAt: Date;
     readonly sourceUrl: string;
     readonly resolvedBy: string;
+    /** True only when an independent provider confirmed this outcome. */
+    readonly verified: boolean;
+    /** The full verification state, so the UI can distinguish contradicted from unchecked. */
+    readonly verification: "self_attested" | "oracle_verified" | "oracle_contradicted";
   };
 }
 
@@ -24,6 +28,7 @@ export async function loadAnalystSamples(analystId: string): Promise<AnalystSamp
       resolvedAt: outcomes.resolvedAt,
       sourceUrl: outcomes.sourceUrl,
       resolvedBy: outcomes.resolvedBy,
+      verification: outcomes.verification,
     })
     .from(picks)
     .innerJoin(outcomes, eq(outcomes.pickId, picks.id))
@@ -38,6 +43,8 @@ export async function loadAnalystSamples(analystId: string): Promise<AnalystSamp
       resolvedAt: row.resolvedAt,
       sourceUrl: row.sourceUrl,
       resolvedBy: row.resolvedBy,
+      verified: row.verification === "oracle_verified",
+      verification: row.verification,
     },
   }));
 }
@@ -51,6 +58,7 @@ export async function analystCredibility(
     outcome: sample.outcome.result,
     brier: sample.outcome.brier,
     resolvedAt: sample.outcome.resolvedAt,
+    verified: sample.outcome.verified,
   }));
   return credibilityBreakdown(mapped, now);
 }
@@ -65,6 +73,10 @@ export interface LeaderboardEntry {
   readonly credibility: CredibilityBreakdown;
   /** Resolved samples whose outcome was supplied by the pick owner, not an oracle. */
   readonly communityAttestedSamples: number;
+  /** Resolved samples an independent provider confirmed. */
+  readonly oracleVerifiedSamples: number;
+  /** Resolved samples the provider disagreed with. */
+  readonly contradictedSamples: number;
 }
 
 export async function leaderboard(now: Date = new Date()): Promise<LeaderboardEntry[]> {
@@ -77,21 +89,32 @@ export async function leaderboard(now: Date = new Date()): Promise<LeaderboardEn
 
   const grouped = new Map<
     string,
-    { analyst: AnalystRow; samples: CredibilitySample[]; communityAttestedSamples: number }
+    {
+      analyst: AnalystRow;
+      samples: CredibilitySample[];
+      communityAttestedSamples: number;
+      oracleVerifiedSamples: number;
+      contradictedSamples: number;
+    }
   >();
   for (const row of rows) {
     const entry = grouped.get(row.analyst.id) ?? {
       analyst: row.analyst,
       samples: [],
       communityAttestedSamples: 0,
+      oracleVerifiedSamples: 0,
+      contradictedSamples: 0,
     };
     if (row.outcome) {
       entry.samples.push({
         outcome: row.outcome.result,
         brier: row.outcome.brier,
         resolvedAt: row.outcome.resolvedAt,
+        verified: row.outcome.verification === "oracle_verified",
       });
       if (row.outcome.resolvedBy.startsWith("user:")) entry.communityAttestedSamples += 1;
+      if (row.outcome.verification === "oracle_verified") entry.oracleVerifiedSamples += 1;
+      if (row.outcome.verification === "oracle_contradicted") entry.contradictedSamples += 1;
     }
     grouped.set(row.analyst.id, entry);
   }
@@ -101,6 +124,8 @@ export async function leaderboard(now: Date = new Date()): Promise<LeaderboardEn
       analyst: entry.analyst,
       credibility: credibilityBreakdown(entry.samples, now),
       communityAttestedSamples: entry.communityAttestedSamples,
+      oracleVerifiedSamples: entry.oracleVerifiedSamples,
+      contradictedSamples: entry.contradictedSamples,
     }))
     .sort((a, b) => b.credibility.score - a.credibility.score);
 }
@@ -192,6 +217,9 @@ export interface PickFeedItem {
     readonly sourceUrl: string;
     readonly resolvedBy: string;
     readonly brier: number | null;
+    readonly verification: "self_attested" | "oracle_verified" | "oracle_contradicted";
+    readonly oracleResult: "win" | "loss" | "void" | null;
+    readonly oracleNote: string | null;
   } | null;
 }
 
@@ -208,6 +236,9 @@ export async function recentPicks(limit = 50, userId?: string): Promise<PickFeed
       sourceUrl: outcomes.sourceUrl,
       resolvedBy: outcomes.resolvedBy,
       brier: outcomes.brier,
+      verification: outcomes.verification,
+      oracleResult: outcomes.oracleResult,
+      oracleNote: outcomes.oracleNote,
     })
     .from(picks)
     .innerJoin(analysts, eq(analysts.id, picks.analystId))
@@ -227,7 +258,8 @@ export async function recentPicks(limit = 50, userId?: string): Promise<PickFeed
       row.result === null ||
       row.resolvedAt === null ||
       row.sourceUrl === null ||
-      row.resolvedBy === null
+      row.resolvedBy === null ||
+      row.verification === null
         ? null
         : {
             result: row.result,
@@ -235,6 +267,9 @@ export async function recentPicks(limit = 50, userId?: string): Promise<PickFeed
             sourceUrl: row.sourceUrl,
             resolvedBy: row.resolvedBy,
             brier: row.brier,
+            verification: row.verification,
+            oracleResult: row.oracleResult,
+            oracleNote: row.oracleNote,
           },
   }));
 }
@@ -245,6 +280,41 @@ export interface PickStats {
   readonly revealed: number;
   readonly resolved: number;
   readonly voided: number;
+}
+
+export interface VerificationStats {
+  readonly resolved: number;
+  readonly verified: number;
+  readonly contradicted: number;
+  readonly selfAttested: number;
+}
+
+/**
+ * How much of a journal's own record an independent provider actually confirmed.
+ *
+ * The seller panel shows this next to the earnings, because money earned from a
+ * self-graded record is not the same product as money earned from a verified one, and a
+ * seller should not be able to imply otherwise by omitting the count.
+ */
+export async function verificationStatsForUser(userId: string): Promise<VerificationStats> {
+  const rows = await getDb()
+    .select({ verification: outcomes.verification, total: count() })
+    .from(outcomes)
+    .innerJoin(picks, eq(picks.id, outcomes.pickId))
+    .where(eq(picks.userId, userId))
+    .groupBy(outcomes.verification);
+
+  const byState = new Map(rows.map((row) => [row.verification, Number(row.total)]));
+  const verified = byState.get("oracle_verified") ?? 0;
+  const contradicted = byState.get("oracle_contradicted") ?? 0;
+  const selfAttested = byState.get("self_attested") ?? 0;
+
+  return {
+    resolved: verified + contradicted + selfAttested,
+    verified,
+    contradicted,
+    selfAttested,
+  };
 }
 
 export async function pickStats(): Promise<PickStats> {

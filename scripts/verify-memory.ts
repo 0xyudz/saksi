@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
 
+import { sql } from "drizzle-orm";
+
 import "./load-env";
 
 import { closeDb, getDb } from "@/db/client";
@@ -21,7 +23,11 @@ async function main(): Promise<void> {
   const runtime = await health();
   output({ step: "health", status: runtime.status, version: runtime.version });
 
-  const rows = await getDb().select({ id: users.id, handle: users.handle }).from(users).limit(1);
+  const rows = await getDb()
+    .select({ id: users.id, handle: users.handle })
+    .from(users)
+    .orderBy(sql`case when ${users.handle} = 'saksi_demo' then 0 else 1 end`)
+    .limit(1);
   const user = rows[0];
   if (!user) {
     throw new Error(
@@ -37,6 +43,7 @@ async function main(): Promise<void> {
   const wrote = await remember(user.id, memory);
   output({
     step: "rememberAndWait",
+    handle: user.handle,
     namespace: userNamespace(user.id),
     blobId: wrote.blobId,
     jobId: wrote.jobId,
@@ -57,6 +64,7 @@ async function main(): Promise<void> {
   const ledger = await listMemories(user.id);
   output({
     step: "listMemories",
+    handle: user.handle,
     fetched: ledger.fetched,
     hasMore: ledger.hasMore,
     truncated: ledger.truncated,
