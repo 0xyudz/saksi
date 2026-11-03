@@ -1,7 +1,5 @@
 import type { Metadata } from "next";
 
-import { AppFooter } from "@/components/AppFooter";
-import { AppNav } from "@/components/AppNav";
 import { APP_NAME, APP_TAGLINE } from "@/lib/config";
 import { Providers } from "./providers";
 
@@ -17,15 +15,15 @@ export const metadata: Metadata = {
   applicationName: APP_NAME,
 };
 
+/**
+ * The root layout owns the document only. Each route group renders its own navigation and
+ * footer, so the marketing site and the journal can differ without a conditional shell.
+ */
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
       <body className="min-h-screen antialiased">
-        <Providers>
-          <AppNav />
-          <main className="min-h-[70vh]">{children}</main>
-          <AppFooter />
-        </Providers>
+        <Providers>{children}</Providers>
       </body>
     </html>
   );

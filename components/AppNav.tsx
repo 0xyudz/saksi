@@ -5,6 +5,7 @@ import { WalletMenu } from "@/components/WalletMenu";
 import { getSessionUser } from "@/lib/session";
 
 const LINKS = [
+  { href: "/dashboard", label: "Overview" },
   { href: "/picks", label: "Picks" },
   { href: "/analysts", label: "Analysts" },
   { href: "/memory", label: "Memory" },
@@ -18,7 +19,7 @@ export async function AppNav() {
   return (
     <header className="border-line bg-base/85 sticky top-0 z-40 border-b backdrop-blur-md">
       <div className="container-page flex h-16 items-center justify-between gap-6">
-        <Link href="/" className="group flex items-center gap-3">
+        <Link href="/dashboard" className="group flex items-center gap-3">
           <span className="border-amber/40 bg-amber/10 relative grid size-9 place-items-center rounded-full border">
             <span className="display text-amber text-lg leading-none">S</span>
             <span className="border-amber/20 absolute inset-1 rounded-full border" />
@@ -41,6 +42,12 @@ export async function AppNav() {
               {link.label}
             </Link>
           ))}
+          <Link
+            href="/docs"
+            className="text-muted hover:text-paper rounded-full px-3 py-2 text-sm transition-colors hover:bg-white/5"
+          >
+            Docs
+          </Link>
         </nav>
 
         <div className="flex items-center gap-3">
@@ -78,6 +85,12 @@ export async function AppNav() {
             {link.label}
           </Link>
         ))}
+        <Link
+          href="/docs"
+          className="text-muted hover:text-paper rounded-full px-3 py-1.5 text-xs whitespace-nowrap hover:bg-white/5"
+        >
+          Docs
+        </Link>
       </nav>
     </header>
   );

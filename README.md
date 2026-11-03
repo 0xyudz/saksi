@@ -15,7 +15,7 @@ Built for **Total Recall — Tatum × Walrus Memory** (Track 1: Markets & Sports
 | ------------------------------------- | ------------------------------------------------------------------------- |
 | `pnpm typecheck`                      | passes                                                                    |
 | `pnpm lint`                           | passes                                                                    |
-| `pnpm test`                           | 82 tests pass across 13 files                                             |
+| `pnpm test`                           | 105 tests pass across 14 files                                            |
 | `pnpm build`                          | passes (Next.js 16.4.3, Turbopack)                                        |
 | Migrations generated                  | `0000`, `0001`, `0002_graceful_vindicator.sql`                            |
 | Migrations applied to a live database | yes — 8 tables on a live Postgres instance                                |
@@ -85,7 +85,9 @@ pnpm db:migrate
 pnpm dev
 ```
 
-Open `http://localhost:3000`, create a journal at `/onboarding`, then visit `/picks/new`.
+Open `http://localhost:3000` for the landing page, `/how-it-works` for the short
+explanation, and `/docs` for the documents in this repository. Create a journal at
+`/onboarding`, then visit `/picks/new`.
 
 > `pnpm build` does not need production credentials. Every runtime entry point validates
 > them through `instrumentation.ts` and fails fast when a required value is missing.
@@ -238,16 +240,31 @@ once against any new database before the app starts.
 
 ## Routes
 
-| Route                                 | Purpose                                                                                         |
-| ------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| `/`                                   | dashboard: stats, credibility leaderboard, latest picks, memory decision, Tatum settlement feed |
-| `/onboarding`                         | create a journal identity; shows the one-time recovery code                                     |
-| `/resume`                             | resume an existing journal with its handle and recovery code                                    |
-| `/picks`, `/picks/new`, `/picks/[id]` | ledger, sealed pick form, proof detail + reveal/resolve                                         |
-| `/analysts`, `/analysts/[id]`         | leaderboard and calibration/evidence                                                            |
-| `/memory`                             | relayer health, fetched `listMemories()` pages, recall with paired citations                    |
-| `/signals`, `/signals/[id]`           | provider listings and paid purchase panel                                                       |
-| `/payments`                           | settlement ledger, merchant balance, events, manual digest verification                         |
+The site has a marketing surface and the journal itself. The landing page owns `/`; the
+journal lives under `/dashboard` so a reviewer can read what Saksi is before creating
+anything.
+
+Marketing:
+
+| Route           | Purpose                                                                      |
+| --------------- | ---------------------------------------------------------------------------- |
+| `/`             | landing page: what Saksi is, the four steps, the stack, the honest limits    |
+| `/how-it-works` | the lifecycle, the canonical hash, the scoring formula and the x402 sequence |
+| `/docs`         | index of the documents below                                                 |
+| `/docs/[slug]`  | renders `README.md` and the four files in `docs/` directly, statically       |
+
+Journal:
+
+| Route                                 | Purpose                                                                              |
+| ------------------------------------- | ------------------------------------------------------------------------------------ |
+| `/dashboard`                          | stats, credibility leaderboard, latest picks, memory decision, Tatum settlement feed |
+| `/onboarding`                         | create a journal identity; shows the one-time recovery code                          |
+| `/resume`                             | resume an existing journal with its handle and recovery code                         |
+| `/picks`, `/picks/new`, `/picks/[id]` | ledger, sealed pick form, proof detail + reveal/resolve                              |
+| `/analysts`, `/analysts/[id]`         | leaderboard and calibration/evidence                                                 |
+| `/memory`                             | relayer health, fetched `listMemories()` pages, recall with paired citations         |
+| `/signals`, `/signals/[id]`           | provider listings and paid purchase panel                                            |
+| `/payments`                           | settlement ledger, merchant balance, events, manual digest verification              |
 
 API:
 

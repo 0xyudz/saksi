@@ -51,7 +51,7 @@ imports either one; the relayer uses them.
 | TypeScript 5.9.3 (`strict`, no `any`)           | `noUncheckedIndexedAccess`, `noImplicitOverride`, `noFallthroughCasesInSwitch` all on. |
 | ESLint 9 + `eslint-config-next` 16.4.3          | `no-explicit-any`, `no-console`, `no-empty` (catch included), `eqeqeq` as errors.      |
 | Prettier 3.9.10 + `prettier-plugin-tailwindcss` | Formatting, including class ordering.                                                  |
-| Vitest 5.0.5                                    | Unit tests for pure functions only. 82 tests across 13 files.                          |
+| Vitest 5.0.5                                    | Unit tests for pure functions only. 105 tests across 14 files.                         |
 | `tsx` 4.20.6                                    | Runs the verification scripts without a build step.                                    |
 | Drizzle Kit 0.31.11                             | Migration generation and application.                                                  |
 
@@ -838,6 +838,15 @@ Every page is a server component. That is not a stylistic choice: the proof is i
 and a client-rendered shell would mean a crawler or a reviewer sees nothing until JavaScript
 runs.
 
+The surface is split with route groups, which do not add URL segments:
+
+- `app/(marketing)` owns `/`, `/how-it-works`, `/docs` and `/docs/[slug]`. It renders its own
+  navigation and footer and reads neither the session nor the database, so the whole
+  marketing surface prerenders as static HTML (`○` and `●` in the build output).
+- `app/(app)` owns `/dashboard` and the journal routes, with the product nav, the wallet
+  button and the footer.
+- `app/layout.tsx` owns only `<html>`, `<body>` and `Providers`.
+
 The wallet provider nearly broke this, and the story is worth recording.
 
 **The bug:** `app/providers.tsx` mounted `DAppKitProvider` through
@@ -860,9 +869,11 @@ const SLUSH_CONFIG = typeof window === "undefined" ? null : { appName: APP_NAME 
 That initializer reads `document.title` and fetches wallet metadata, neither of which exists on
 the server.
 
-**Verified after the fix**, in both `pnpm dev` and `pnpm start`: `/`, `/picks`, `/signals`,
-`/analysts`, `/payments`, `/onboarding` and `/resume` all return `200` with server-rendered
-markup, and the four invalid-id URLs plus `/nope` return a real `404` with no failed query.
+**Verified after the fix**, in both `pnpm dev` and `pnpm start`: `/dashboard`, `/picks`,
+`/signals`, `/analysts`, `/payments`, `/onboarding` and `/resume` all return `200` with
+server-rendered markup, and the invalid-id URLs plus `/nope` return a real `404` with no
+failed query. The marketing pages (`/`, `/how-it-works`, `/docs`, `/docs/[slug]`) return
+`200` with no `Switched to client rendering` bailout anywhere in the HTML.
 
 The lesson generalises: a `ssr: false` dynamic import at the root layout is not a local
 optimisation, it is a decision about the whole app.
@@ -935,11 +946,26 @@ instance keeps its own pool and serverless platforms clone instances.
 Every page is a server component that reads through `server/` and renders proof, not a
 loading spinner. Forms are the only client components, and they call internal API routes.
 
-### Pages
+The site has two surfaces. `app/(marketing)` owns `/`, `/how-it-works` and `/docs`, renders
+its own navigation, and never reads the session or the database — so the landing page is
+static and looks identical for a reviewer with no wallet installed. `app/(app)` owns the
+journal under `/dashboard` and its sibling routes, with the product nav, the wallet button
+and the footer.
+
+### Marketing pages
+
+| Page            | What it does                                                                                                                                                                   |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `/`             | Landing page: the problem, the four steps, the three integrations with real recorded values, what the product explicitly does not claim, and the document index.               |
+| `/how-it-works` | The lifecycle table (what each state writes and refuses), why the hash must be canonical, the scoring and verdict formulas, the six-step x402 sequence, and the stated limits. |
+| `/docs`         | Index of the documents, with a reading order.                                                                                                                                  |
+| `/docs/[slug]`  | Renders `README.md` and the four files in `docs/` directly, prerendered by `generateStaticParams`.                                                                             |
+
+### Journal pages
 
 | Page             | What it does                                                                                                                                                                                        |
 | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `/`              | Dashboard: pick stats, credibility leaderboard, latest commitments, the most recent memory-driven decision with its cited blob ids, and a live settlement feed built from Tatum transaction events. |
+| `/dashboard`     | Dashboard: pick stats, credibility leaderboard, latest commitments, the most recent memory-driven decision with its cited blob ids, and a live settlement feed built from Tatum transaction events. |
 | `/onboarding`    | Creates a journal and reveals the 24-symbol recovery code **once**, behind a checkbox that must be ticked before entering.                                                                          |
 | `/resume`        | Restores a session from handle + recovery code. Accepts the code in any case or grouping.                                                                                                           |
 | `/picks`         | Public ledger plus `?mine=true`. Sealed rows show only hash and timestamp to non-owners.                                                                                                            |
@@ -1022,7 +1048,7 @@ itself and everywhere they surface. They are never presented as real forecasts.
 
 ## 14. Testing strategy
 
-The suite is deliberately narrow: **82 tests across 13 files, all pure functions.** No
+The suite is deliberately narrow: **105 tests across 14 files, all pure functions.** No
 network, no database, no fake service.
 
 | File                      | What it pins down                                                                                   |
@@ -1040,6 +1066,7 @@ network, no database, no fake service.
 | `signal-provider.test.ts` | HTTP status → error mapping, retry only on 5xx                                                      |
 | `tatum-mapping.test.ts`   | GraphQL response → domain shapes, balance change mapping                                            |
 | `ids.test.ts`             | UUID acceptance and rejection, including out-of-range version nibble                                |
+| `markdown.test.ts`        | Inline emphasis/links/code spans, table cell splitting, fenced code, list folding, heading anchors  |
 
 What is **not** unit tested, and how it is covered instead:
 

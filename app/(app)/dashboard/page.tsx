@@ -15,7 +15,9 @@ import { presentPick } from "@/server/presenters/pick";
 
 export const dynamic = "force-dynamic";
 
-export default async function HomePage() {
+export const metadata = { title: "Dashboard" };
+
+export default async function DashboardPage() {
   const [user, stats, board, feed, recommendations, payments] = await Promise.all([
     getSessionUser(),
     pickStats(),

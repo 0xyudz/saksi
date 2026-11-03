@@ -31,7 +31,7 @@ export function LogoutButton({ hasRecovery }: { readonly hasRecovery: boolean })
         method: "DELETE",
         schema: responseSchema,
       });
-      router.push("/");
+      router.push("/dashboard");
       router.refresh();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not end the session.");
