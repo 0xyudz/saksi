@@ -27,8 +27,15 @@ Built for **Total Recall — Tatum × Walrus Memory** (Track 1: Markets & Sports
 
 Every value in [Proof](#proof) was produced by the command named beside it against Sui
 mainnet on 2 Nov 2026, and nothing there is estimated. The settlement in that table came
-from a self-custody browser wallet signing its own payment, not from an operator key. See
-also [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md).
+from a self-custody browser wallet signing its own payment, not from an operator key.
+
+Companion documents:
+
+- [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md) — how every subsystem works and why each
+  decision was made: identity, sealed picks, scoring, Walrus Memory, Tatum, x402, the HTTP
+  boundary, rendering, the data model, testing and the failure policy matrix.
+- [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) — the third-party contracts Saksi was built
+  against, the exact calls used, and the recorded mainnet proof.
 
 ## What is implemented
 
@@ -210,6 +217,13 @@ Key constraints:
 - Walrus memory kinds are split by lifecycle: `pick_commit` (market, hash, timestamp),
   `pick_reveal` (selection, odds, reveal time), then `outcome`, `bias`, `source_roi`,
   `payment` and `preference`. Legacy `pick` records remain readable and are never written.
+- Analysts are global, not owned by a journal, so deleting a journal leaves its analysts
+  behind. Clean them up deliberately rather than by cascade:
+
+  ```sql
+  delete from analysts
+  where not exists (select 1 from picks p where p.analyst_id = analysts.id);
+  ```
 
 Generate a migration after schema changes:
 
@@ -218,9 +232,9 @@ pnpm db:generate
 pnpm db:migrate
 ```
 
-`0001_worried_satana.sql` (payments `resource`/`requirements`) was **generated but not
-applied** in this workspace because no PostgreSQL runtime was available. Run
-`pnpm db:migrate` against a real database before starting the app.
+All three migrations (`0000`, `0001_worried_satana.sql`, `0002_graceful_vindicator.sql`) are
+applied to the live database this project was built against, and `pnpm db:migrate` must be run
+once against any new database before the app starts.
 
 ## Routes
 

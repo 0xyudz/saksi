@@ -197,3 +197,7 @@ way a Postgres table does not.
 Code, migrations, tests and the verification scripts are in the repository linked with this
 submission. `pnpm verify:memory` and `pnpm verify:tatum` reproduce the numbers above; the
 README's Proof table lists every value with the command that produced it.
+
+If you want the engineering detail rather than the story — how identity works, why the
+commitment hash is computed the way it is, which memory failures are fatal, how the x402
+settlement is verified before data is released — it is in `docs/IMPLEMENTATION.md`.
