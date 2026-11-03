@@ -180,8 +180,8 @@ Everything below was produced against Sui mainnet on 2 Nov 2026, and the command
 reproduce it are in the repo:
 
 - **Walrus Memory** — relayer `0.1.0`, a fresh write returned blob
-  `Y-TFsuMq1956BWInd8F26H62S1ohTI8hxT723DMjckE`, recalled at cosine distance
-  `0.35874120150280087`.
+  `tO58wlvK_zeGbWMS9sWf284bMr9c_Y2uuQQsj20kKMw`, recalled at cosine distance
+  `0.35998293954418614`.
 - **Memories on mainnet** — 38 rows across `pick_commit` 12, `pick_reveal` 8, `outcome` 8,
   `preference` 8, `payment` 1 and `source_roi` 1.
 - **Tatum** — checkpoint `341329560`; settlement

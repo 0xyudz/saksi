@@ -29,10 +29,10 @@ const LIFECYCLE = [
   {
     status: "resolved",
     title: "Resolve",
-    what: "You record win, loss or void, plus a source URL and a timestamp.",
+    what: "You record win, loss or void. If the pick is linked to a real fixture, the provider is re-read first.",
     writes: "outcome, bias, source_roi memories",
     guard: "Owner only. Must be revealed first. resolvedAt cannot precede committedAt.",
-    why: "outcomes.pick_id is unique, so a second resolution is a 409, not a silent overwrite.",
+    why: "A truthful claim becomes oracle_verified, a false one becomes oracle_contradicted with both verdicts kept, and anything outside the oracle's scope stays self-attested.",
   },
 ] as const;
 
@@ -59,16 +59,16 @@ downgrade(reduce)  = avoid`;
 
 const NOT_CLAIMED = [
   {
-    title: "It does not prove the outcome is true",
-    body: "sourceUrl is validated as an http(s) URL but never fetched. The hash proves the pick existed before the event and was not edited; it says nothing about whether the cited result is real. Every resolved card is labelled Self-attested.",
+    title: "It does not verify everything",
+    body: "Oracle coverage is one league (English Premier League) and match-winner markets. A pick linked to a real fixture is verified against the provider; everything else is labelled Self-attested, with the source URL the owner supplied. The boundary is stated rather than hidden.",
   },
   {
-    title: "It does not have an independent oracle",
-    body: "Analyst scores are computed from outcomes that pick owners supplied. They are community-attested, which is honest about its own provenance and therefore comparable only within that assumption.",
+    title: "It does not erase a contradiction",
+    body: "When the provider disagrees with the owner's claim, both verdicts are stored. The owner's record is not deleted, but it earns no verified credit, and only provider-confirmed outcomes count toward verifiedScore.",
   },
   {
     title: "It does not hide behind a wallet requirement",
-    body: "A journal needs no wallet and no extension. You only connect a Sui wallet if you choose to buy a premium signal, and then your wallet signs its own payment — the server never holds a buyer key.",
+    body: "A wallet proves the address that will receive a seller's money, and buyers sign their own payments. The server never holds a buyer or seller key. A recovery code remains the fallback if a wallet is lost.",
   },
 ] as const;
 
@@ -257,8 +257,10 @@ commitmentHash = sha256(canonicalJson(payload))
             <p className="mono text-amber text-[10px] tracking-[0.24em] uppercase">Paid signals</p>
             <h2 className="display mt-4 text-4xl">Pay per call, verify before release.</h2>
             <p className="text-muted mt-4 text-[15px] leading-relaxed">
-              Premium signals sit behind an x402 paywall on Sui. The buyer signs with their own
-              wallet; the seller releases nothing until Tatum confirms the settlement on-chain.
+              Any journal that proves a Sui wallet can sell a signal. Publishing costs a flat
+              listing fee to the platform; each sale goes straight to the seller&apos;s wallet. The
+              buyer signs with their own wallet, and nothing is released until Tatum confirms the
+              settlement on-chain.
             </p>
           </div>
 
@@ -266,7 +268,7 @@ commitmentHash = sha256(canonicalJson(payload))
             {[
               {
                 label: "1 · challenge",
-                body: "No payment header: the seller answers 402 with the exact network, asset and amount it accepts.",
+                body: "No payment header: the endpoint answers 402 with the exact network, asset, amount and payee it accepts. A seller's own wallet is the payee.",
               },
               {
                 label: "2 · sign",

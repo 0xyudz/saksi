@@ -421,8 +421,8 @@ re-running `verify:memory` proves the same path with fresh values.
 | Proof                               | Value                                                                                                | Produced by                      |
 | ----------------------------------- | ---------------------------------------------------------------------------------------------------- | -------------------------------- |
 | Walrus Memory relayer               | `status: ok`, relayer `0.1.0`                                                                        | `pnpm verify:memory`             |
-| Walrus Memory blob ID (fresh write) | `Y-TFsuMq1956BWInd8F26H62S1ohTI8hxT723DMjckE`                                                        | `pnpm verify:memory`             |
-| Walrus Memory recall distance       | `0.35874120150280087` (cosine)                                                                       | `pnpm verify:memory`             |
+| Walrus Memory blob ID (fresh write) | `tO58wlvK_zeGbWMS9sWf284bMr9c_Y2uuQQsj20kKMw`                                                        | `pnpm verify:memory`             |
+| Walrus Memory recall distance       | `0.35998293954418614` (cosine)                                                                       | `pnpm verify:memory`             |
 | Walrus Memory blob ID (sealed pick) | `RruPtIKgN3QZyEmUNOIVqA_yrk8mBylE8Bsg4h9O0NA` (`pick_commit`)                                        | `memory_writes`                  |
 | Walrus Memory blob ID (payment)     | `iQkdVACTG5arG58RDCnYr74_dJPeueaeJ9NTGheeBRA` (`payment`)                                            | `memory_writes`                  |
 | Walrus Memory blob ID (source ROI)  | `KkHx_aFl4YkIBBGF3bQ4hMMljtdhshUUTVMxhEqbjcE` (`source_roi`)                                         | `memory_writes`                  |

@@ -565,7 +565,7 @@ after a successful write, the error is logged and the write still counts — the
 source of truth, the row is bookkeeping.
 
 Because Walrus blobs cannot be deleted, `memory_writes` outlives deleted journals. That is why
-the README reports 27 rows against 3 surviving journals, and explains it rather than hiding
+the README reports 38 rows against 4 surviving journals, and explains it rather than hiding
 it.
 
 ---
@@ -754,8 +754,8 @@ Past the budget, the last error is returned and the digest can be re-checked thr
 
 `components/forms/PurchaseSignalPanel.tsx` supplies the signer: it takes the connected
 account's address and routes `signTransaction` through `dAppKit.signTransaction({ network:
-"mainnet" })`. The merchant payee (`X402_PAY_TO_ADDRESS`) stays operator-owned, so the demo
-has a real recipient without the operator ever paying.
+"mainnet" })`. The payee is read from the signal row: a seller's own wallet for a listed
+signal, or `X402_PAY_TO_ADDRESS` for the older catalogue rows.
 
 `integrations/x402/buyer.ts` keeps the same flow for `pnpm verify:x402`, reading
 `X402_CLIENT_PRIVATE_KEY` from the environment and re-verifying the digest through Tatum even
@@ -790,9 +790,9 @@ basics.
 | ---------------------- | ---- | ------------------------------------------------------------------------------------- |
 | `VALIDATION_FAILED`    | 400  | zod rejected a body, query, id or price.                                              |
 | `UNAUTHORIZED`         | 401  | No session, or handle + code do not match.                                            |
-| `FORBIDDEN`            | 403  | Not the owner, not an operator, or cross-origin.                                      |
-| `NOT_FOUND`            | 404  | Missing pick, analyst, signal or provider id.                                         |
-| `CONFLICT`             | 409  | Duplicate handle, already resolved, time-locked, stale price, digest bound elsewhere. |
+| `FORBIDDEN`            | 403  | Not the owner, no proven wallet, or cross-origin.                                     |
+| `NOT_FOUND`            | 404  | Missing pick, analyst or signal.                                                      |
+| `CONFLICT`             | 409  | Duplicate handle, already resolved, time-locked, wallet already bound, digest reused. |
 | `PAYMENT_REQUIRED`     | 402  | x402 challenge.                                                                       |
 | `PAYMENT_NOT_VERIFIED` | 402  | Tatum rejected or has not indexed the settlement yet.                                 |
 | `RATE_LIMITED`         | 429  | Per-IP limiter.                                                                       |

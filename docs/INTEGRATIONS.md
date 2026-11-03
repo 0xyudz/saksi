@@ -271,8 +271,8 @@ idempotent.
 Signal purchases are self-custody. The browser mounts `DAppKitProvider` from
 `@mysten/dapp-kit-react` against Sui mainnet, the buyer connects their own wallet, and
 `lib/x402-wallet.ts` asks the wallet to sign the Sui transaction that
-`@tentaclepay/sui-x402` builds. The private key never reaches the server, and the merchant
-payee (`X402_PAY_TO_ADDRESS`) stays operator-owned.
+`@tentaclepay/sui-x402` builds. The private key never reaches the server, and the payee is
+the seller's own wallet from the signal row.
 
 `lib/x402-wallet.ts` uses:
 
@@ -335,7 +335,7 @@ ones recorded at the time of writing rather than constants.
 | Area                     | Result                                                                                                                         | Command              |
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------ | -------------------- |
 | Walrus Memory relayer    | `status: ok`, relayer `0.1.0`                                                                                                  | `pnpm verify:memory` |
-| Walrus write + recall    | blob `Y-TFsuMq1956BWInd8F26H62S1ohTI8hxT723DMjckE`, cosine distance `0.35874120150280087`, exact text returned                 | `pnpm verify:memory` |
+| Walrus write + recall    | blob `tO58wlvK_zeGbWMS9sWf284bMr9c_Y2uuQQsj20kKMw`, cosine distance `0.35998293954418614`, exact text returned                 | `pnpm verify:memory` |
 | `listMemories()`         | 10 memories for `saksi_demo`, `hasMore: false` (one is added per verification run)                                             | `pnpm verify:memory` |
 | Mainnet memories written | 38 rows across `pick_commit` 12, `pick_reveal` 8, `outcome` 8, `preference` 8, `payment` 1, `source_roi` 1                     | `memory_writes`      |
 | Tatum checkpoint         | `341329560` (advances; any recent value proves the query)                                                                      | `pnpm verify:tatum`  |
