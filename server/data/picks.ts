@@ -29,24 +29,34 @@ export async function loadAnalystSamples(analystId: string): Promise<AnalystSamp
       sourceUrl: outcomes.sourceUrl,
       resolvedBy: outcomes.resolvedBy,
       verification: outcomes.verification,
+      oracleResult: outcomes.oracleResult,
     })
     .from(picks)
     .innerJoin(outcomes, eq(outcomes.pickId, picks.id))
     .where(eq(picks.analystId, analystId))
     .orderBy(desc(outcomes.resolvedAt));
 
-  return rows.map((row) => ({
-    pick: row.pick,
-    outcome: {
-      result: row.result,
-      brier: row.brier,
-      resolvedAt: row.resolvedAt,
-      sourceUrl: row.sourceUrl,
-      resolvedBy: row.resolvedBy,
-      verified: row.verification === "oracle_verified",
-      verification: row.verification,
-    },
-  }));
+  return rows.map((row) => {
+    /*
+     * A contradicted claim is scored as what the provider actually recorded. Otherwise a
+     * seller could claim a win on every pick, be contradicted each time, and still keep a
+     * perfect `score` (only `verifiedScore` would notice). The stored outcome and the UI
+     * still show the owner's claim; this mapping is what the credibility model reads.
+     */
+    const contradictedResult = row.verification === "oracle_contradicted" ? row.oracleResult : null;
+    return {
+      pick: row.pick,
+      outcome: {
+        result: contradictedResult ?? row.result,
+        brier: row.brier,
+        resolvedAt: row.resolvedAt,
+        sourceUrl: row.sourceUrl,
+        resolvedBy: row.resolvedBy,
+        verified: row.verification === "oracle_verified",
+        verification: row.verification,
+      },
+    };
+  });
 }
 
 export async function analystCredibility(
@@ -106,8 +116,10 @@ export async function leaderboard(now: Date = new Date()): Promise<LeaderboardEn
       contradictedSamples: 0,
     };
     if (row.outcome) {
+      const contradictedResult =
+        row.outcome.verification === "oracle_contradicted" ? row.outcome.oracleResult : null;
       entry.samples.push({
-        outcome: row.outcome.result,
+        outcome: contradictedResult ?? row.outcome.result,
         brier: row.outcome.brier,
         resolvedAt: row.outcome.resolvedAt,
         verified: row.outcome.verification === "oracle_verified",
@@ -119,15 +131,26 @@ export async function leaderboard(now: Date = new Date()): Promise<LeaderboardEn
     grouped.set(row.analyst.id, entry);
   }
 
-  return [...grouped.values()]
-    .map((entry) => ({
-      analyst: entry.analyst,
-      credibility: credibilityBreakdown(entry.samples, now),
-      communityAttestedSamples: entry.communityAttestedSamples,
-      oracleVerifiedSamples: entry.oracleVerifiedSamples,
-      contradictedSamples: entry.contradictedSamples,
-    }))
-    .sort((a, b) => b.credibility.score - a.credibility.score);
+  return (
+    [...grouped.values()]
+      .map((entry) => ({
+        analyst: entry.analyst,
+        credibility: credibilityBreakdown(entry.samples, now),
+        communityAttestedSamples: entry.communityAttestedSamples,
+        oracleVerifiedSamples: entry.oracleVerifiedSamples,
+        contradictedSamples: entry.contradictedSamples,
+      }))
+      /*
+       * Rank by provider-confirmed evidence first. Sorting by `score` alone let a journal
+       * that graded its own picks outrank one with a shorter but independently verified
+       * record, which is the opposite of what the leaderboard claims to measure.
+       */
+      .sort(
+        (a, b) =>
+          b.credibility.verifiedScore - a.credibility.verifiedScore ||
+          b.credibility.score - a.credibility.score,
+      )
+  );
 }
 
 export async function listPicksForAnalyst(analystId: string, limit = 20): Promise<PickRow[]> {

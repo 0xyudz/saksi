@@ -147,33 +147,65 @@ export function parseSelection(selection: string): SelectionSubject | null {
   return { subject, kind: "home" };
 }
 
-/** Normalises a club name so `Man Utd` and `Manchester United` are not required to match. */
+/**
+ * Club tokens that are either dropped or expanded before comparison.
+ *
+ * Dropping `united`/`utd` outright — as an earlier version did — turned "Man Utd" into
+ * the single token "man", which then matched "Manchester City" by substring. The aliases
+ * below keep the distinguishing words and expand the common abbreviations instead.
+ */
+const CLUB_TOKEN_ALIASES: Readonly<Record<string, string>> = {
+  utd: "united",
+  man: "manchester",
+};
+
+const GENERIC_CLUB_TOKENS: ReadonlySet<string> = new Set(["fc", "afc", "cf", "sc", "club"]);
+
+/** Normalises a club name into comparable, alias-expanded tokens. */
 export function normalizeTeamName(name: string): string {
   return name
     .toLowerCase()
     .replace(/&/g, " and ")
-    .replace(/\bafc\b|\bfc\b|\bcf\b|\bsc\b|\bunited\b|\butd\b/g, "")
     .replace(/[^a-z0-9 ]/g, " ")
-    .replace(/\s+/g, " ")
+    .split(/\s+/)
+    .filter((token) => token.length > 0 && !GENERIC_CLUB_TOKENS.has(token))
+    .map((token) => CLUB_TOKEN_ALIASES[token] ?? token)
+    .join(" ")
     .trim();
 }
 
 /**
- * Compares the picker's subject with a provider team name. Uses containment rather than
- * equality because pickers write `Arsenal` while providers write `Arsenal FC`, and the
- * shorter form must still match. A wrong match is refused rather than guessed: both names
- * must share at least one significant token.
+ * Compares the picker's subject with a provider team name.
+ *
+ * Matching is token-based, not substring-based: every word of the shorter name must be a
+ * word of the longer one. That makes "Newcastle" match "Newcastle United" while keeping
+ * "Man Utd" (`manchester united`) away from "Manchester City" (`manchester city`).
+ *
+ * A single-token name such as "United" still matches both Manchester United and Newcastle
+ * United. That is genuinely ambiguous, so `readFixtureResult` refuses a fixture where both
+ * sides match instead of silently picking one.
  */
 export function teamMatches(selectionSubject: string, teamName: string): boolean {
-  const left = normalizeTeamName(selectionSubject);
-  const right = normalizeTeamName(teamName);
-  if (left.length === 0 || right.length === 0) return false;
-  if (left === right) return true;
-  if (right.includes(left) || left.includes(right)) return true;
+  const left = new Set(normalizeTeamName(selectionSubject).split(" ").filter(Boolean));
+  const right = new Set(normalizeTeamName(teamName).split(" ").filter(Boolean));
+  if (left.size === 0 || right.size === 0) return false;
 
-  const leftTokens = new Set(left.split(" ").filter((token) => token.length > 2));
-  const rightTokens = right.split(" ").filter((token) => token.length > 2);
-  return rightTokens.some((token) => leftTokens.has(token));
+  const [smaller, larger] = left.size <= right.size ? [left, right] : [right, left];
+  for (const token of smaller) {
+    if (!larger.has(token)) return false;
+  }
+  return true;
+}
+
+/**
+ * Decides how much trust a claim earns once the provider has a final result. A claim of
+ * `void` on a fixture the provider completed is a contradiction, not a free pass.
+ */
+export function verificationForClaim(
+  claimed: OracleOutcome,
+  actual: OracleOutcome,
+): "oracle_verified" | "oracle_contradicted" {
+  return claimed === actual ? "oracle_verified" : "oracle_contradicted";
 }
 
 /* -------------------------------------------------------------------------- */
@@ -262,6 +294,13 @@ export async function readFixtureResult(
 
   const selectionIsHome = teamMatches(selection.subject, home.team.displayName);
   const selectionIsAway = teamMatches(selection.subject, away.team.displayName);
+
+  if (selectionIsHome && selectionIsAway) {
+    throw new AppError(
+      "VALIDATION_FAILED",
+      `The selection "${selection.subject}" matches both "${home.team.displayName}" and "${away.team.displayName}", so the side cannot be determined.`,
+    );
+  }
 
   let result: OracleOutcome;
   if (selection.kind === "draw") {

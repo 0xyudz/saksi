@@ -43,9 +43,15 @@ export async function POST(request: Request): Promise<Response> {
 
     const env = getEnv();
     const signal = await getSignal(input.signalId);
+    /*
+     * A listed signal pays its seller, not the platform. Verifying every digest against
+     * `X402_PAY_TO_ADDRESS` made a genuine seller payment look fraudulent; only catalogue
+     * rows with no seller fall back to the platform address.
+     */
+    const payTo = signal.payToAddress ?? env.X402_PAY_TO_ADDRESS;
     const verified = await verifyPaymentWithRetry({
       digest: input.digest,
-      payTo: env.X402_PAY_TO_ADDRESS,
+      payTo,
       minAmountAtomic: signal.priceAtomic,
       network: env.SUI_NETWORK,
     });

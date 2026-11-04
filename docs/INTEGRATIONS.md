@@ -105,19 +105,24 @@ would believe them.
 - The reference (`espn:eng.1:<fixture id>`) is fixed at seal time and stored on the pick.
   Resolution reads that exact fixture, so a picker cannot shop for whichever match makes
   them look right after the fact.
-- Team names are normalised (`FC`, `AFC`, `United`, `Utd` stripped) and compared by
-  containment plus shared significant tokens. A name that matches neither side raises an
-  error rather than guessing a result.
+- Team names are normalised token by token: generic suffixes (`FC`, `AFC`, `CF`, `SC`,
+  `Club`) are dropped and the common abbreviations `Utd → United` and `Man → Manchester`
+  are expanded. Matching requires every word of the shorter name to appear as a whole word
+  in the longer one, so `Man Utd` (`manchester united`) can never match `Manchester City`.
+  A one-word name that fits both sides (`United`) is rejected as ambiguous rather than
+  resolving to the wrong team.
 
 Resolution outcomes:
 
-| Provider state                  | Stored `verification` | Counts toward verified score |
-| ------------------------------- | --------------------- | ---------------------------- |
-| Agrees with the claim           | `oracle_verified`     | yes                          |
-| Disagrees with the claim        | `oracle_contradicted` | no                           |
-| No fixture linked / unparseable | `self_attested`       | no                           |
-| Fixture not finished            | `self_attested`       | no                           |
-| Provider unreachable            | `self_attested`       | no                           |
+| Provider state                        | Stored `verification` | Counts toward verified score |
+| ------------------------------------- | --------------------- | ---------------------------- |
+| Agrees with the claim                 | `oracle_verified`     | yes                          |
+| Disagrees with the claim              | `oracle_contradicted` | no                           |
+| Claimed `void` on a completed fixture | `oracle_contradicted` | no                           |
+| No fixture linked / unparseable       | `self_attested`       | no                           |
+| Fixture not finished                  | `self_attested`       | no                           |
+| Provider unreachable                  | `self_attested`       | no                           |
+| Oracle disabled by configuration      | `self_attested`       | no                           |
 
 A contradiction never overwrites the owner's claim: `outcomes.result` keeps what they said
 and `oracleResult` keeps what the provider recorded, alongside `oracleSource`,

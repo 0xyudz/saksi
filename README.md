@@ -16,7 +16,7 @@ Built for **Total Recall — Tatum × Walrus Memory** (Track 1: Markets & Sports
 | ------------------------------------- | ---------------------------------------------------------------------------- |
 | `pnpm typecheck`                      | passes                                                                       |
 | `pnpm lint`                           | passes                                                                       |
-| `pnpm test`                           | 125 tests pass across 15 files                                               |
+| `pnpm test`                           | 140 tests pass across 17 files                                               |
 | `pnpm build`                          | passes (Next.js 16.4.3, Turbopack)                                           |
 | Migrations generated                  | `0000`–`0005`                                                                |
 | Migrations applied to a live database | yes — 8 tables on a live Postgres instance                                   |
@@ -379,8 +379,9 @@ server is expected to return.
   `self-attested`, and a provider disagreement is stored as `oracle_contradicted` with both
   verdicts rather than overwriting the owner's claim.
 - Analyst scores are computed from all resolved outcomes, but a separate `verifiedScore`
-  uses only oracle-confirmed ones. The leaderboard and analyst page show both, so a
-  self-graded record cannot be presented as a verified one.
+  uses only oracle-confirmed ones. A contradicted claim is scored as what the provider
+  actually recorded, and the leaderboard ranks by `verifiedScore` first and the claimed
+  `score` second, so a self-graded record cannot outrank a verified one.
 - The wallet address a buyer pays is copied onto the signal row at listing time, so a later
   wallet change cannot redirect a live listing's proceeds without a new settlement.
 - A listing fee digest is unique, so one settlement publishes exactly one signal; a seller
@@ -394,7 +395,12 @@ server is expected to return.
 - Wallet login signs a server-issued challenge whose exact bytes are stored in
   `wallet_challenges.message`, so verification cannot drift from what the user approved. The
   nonce is consumed atomically **before** the signature check, so a replayed nonce fails
-  even with a valid signature.
+  even with a valid signature. Login and bind also compare the proven challenge address with
+  the address in the request body, so a signature for one wallet cannot authenticate or
+  claim another.
+- A listing body is validated before the x402 facilitator settles the listing fee. Invalid
+  input therefore returns `400` without moving money, and a valid body without payment still
+  receives the `402` challenge.
 - Session cookies are `<userId>.<hmac-sha256>` signed with `SESSION_SECRET`; old unsigned
   cookies and tampered signatures are treated as no session.
 - `instrumentation.ts` validates credentials before serving traffic.

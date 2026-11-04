@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
 import { WalletMenu } from "@/components/WalletMenu";
+import { GASLESS_MIN_ATOMIC } from "@/lib/config";
+import { parsePriceToAtomic } from "@/lib/price";
 import { publishSignalWithWallet, type PublishedSignalResult } from "@/lib/x402-wallet";
 
 export function PublishSignalPanel({ handle }: { readonly handle: string }) {
@@ -41,6 +43,27 @@ export function PublishSignalPanel({ handle }: { readonly handle: string }) {
       return;
     }
 
+    // The field is a human USD amount; the API only accepts atomic units. Convert here so
+    // a decimal string never reaches the server's integer-only schema.
+    let priceAtomic: string;
+    try {
+      const atomic = parsePriceToAtomic(
+        price.trim().startsWith("$") ? price.trim() : `$${price.trim()}`,
+      );
+      if (atomic < GASLESS_MIN_ATOMIC) {
+        setError("The price must be at least 0.01 USDC, the Sui gasless minimum.");
+        return;
+      }
+      if (atomic > 100_000_000n) {
+        setError("The price must not exceed 100 USDC.");
+        return;
+      }
+      priceAtomic = atomic.toString();
+    } catch {
+      setError("Enter a valid USDC price with at most 6 decimal places.");
+      return;
+    }
+
     setPending(true);
     setError(null);
     setResult(null);
@@ -49,7 +72,7 @@ export function PublishSignalPanel({ handle }: { readonly handle: string }) {
         body: {
           title: title.trim(),
           externalRef: externalRef.trim(),
-          priceAtomic: price.trim(),
+          priceAtomic,
           payload: payload as Record<string, unknown>,
         },
         signer: {

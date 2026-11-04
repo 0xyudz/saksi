@@ -9,8 +9,14 @@ import {
   buildOutcomeMemory,
   buildSourceRoiMemory,
 } from "@/integrations/walrus-memory/schema";
-import { parseOracleRef, parseSelection, readFixtureResult } from "@/integrations/oracle/results";
+import {
+  parseOracleRef,
+  parseSelection,
+  readFixtureResult,
+  verificationForClaim,
+} from "@/integrations/oracle/results";
 import { UNDERDOG_ODDS_THRESHOLD } from "@/lib/config";
+import { getEnv } from "@/lib/env";
 import { AppError } from "@/lib/errors";
 import { errorForLog, getLogger } from "@/lib/logger";
 import { nowIso } from "@/lib/time";
@@ -102,6 +108,24 @@ async function consultOracle(
     };
   }
 
+  /*
+   * `ORACLE_ENABLED` is documented as a kill switch, so it has to be read here. Treating
+   * the deployment's configuration as advisory would leave the switch doing nothing while
+   * outcomes still claimed independent verification.
+   */
+  if (!getEnv().ORACLE_ENABLED) {
+    return {
+      verification: "self_attested",
+      oracleResult: null,
+      oracleSource: `espn:${ref.league}`,
+      oracleEventId: ref.eventId,
+      oracleNote:
+        "Oracle verification is disabled in this deployment, so this result is the journal's own claim.",
+      verifiedAt: null,
+      display: null,
+    };
+  }
+
   let verdict: Awaited<ReturnType<typeof readFixtureResult>>;
   try {
     verdict = await readFixtureResult(ref, selection);
@@ -136,10 +160,11 @@ async function consultOracle(
     };
   }
 
-  const agrees = claimed === "void" ? true : claimed === verdict.result;
+  const verification = verificationForClaim(claimed, verdict.result);
+  const agrees = verification === "oracle_verified";
 
   return {
-    verification: agrees ? "oracle_verified" : "oracle_contradicted",
+    verification,
     oracleResult: verdict.result,
     oracleSource: `espn:${ref.league}`,
     oracleEventId: ref.eventId,
@@ -188,11 +213,20 @@ export async function resolvePick(
   }
 
   const resolvedAt = input.resolvedAt ?? nowIso();
-  if (new Date(resolvedAt).getTime() < row.pick.committedAt.getTime()) {
+  const resolvedAtMs = new Date(resolvedAt).getTime();
+  if (resolvedAtMs < row.pick.committedAt.getTime()) {
     throw new AppError(
       "VALIDATION_FAILED",
       "An outcome cannot be resolved before the pick was committed.",
     );
+  }
+  /*
+   * Recency weighting compares `resolvedAt` with the moment a score is computed. A future
+   * timestamp would pin the sample at full weight forever, so only a small clock-skew
+   * allowance is accepted.
+   */
+  if (resolvedAtMs > Date.now() + 5 * 60_000) {
+    throw new AppError("VALIDATION_FAILED", "An outcome cannot be resolved in the future.");
   }
 
   // Ask the independent provider before writing anything. A contradicted claim is stored
@@ -200,7 +234,16 @@ export async function resolvePick(
   // actually happened side by side.
   const oracle = await consultOracle(row.pick, input.result);
   const probability = impliedProbability(row.pick.odds);
-  const brier = brierScore(probability, input.result);
+  /*
+   * When the provider contradicts the claim, the Brier score must grade the pick against
+   * what actually happened. Scoring the claim would reward a seller for being wrong but
+   * confident, which is exactly what the verification feature exists to prevent.
+   */
+  const scoredResult =
+    oracle.verification === "oracle_contradicted" && oracle.oracleResult !== null
+      ? oracle.oracleResult
+      : input.result;
+  const brier = brierScore(probability, scoredResult);
 
   const inserted = await db.transaction(async (tx) => {
     const created = await tx

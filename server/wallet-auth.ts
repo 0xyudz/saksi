@@ -73,6 +73,22 @@ export function normalizeAddress(address: string): string {
   return normalizeSuiAddress(address).toLowerCase();
 }
 
+/**
+ * Refuses a proof that was issued for a different address than the one the caller
+ * submitted.
+ *
+ * `consumeWalletChallenge` proves control of the address stored in the challenge, not of
+ * whatever address appears in the request body. Without this comparison, a caller could
+ * sign a challenge for their own wallet and then send a victim's address in the body,
+ * turning a valid proof of A into a claim to B. Every caller that looks up or writes an
+ * address must run this check against the returned proof.
+ */
+export function assertProofAddress(proofAddress: string, submittedAddress: string): void {
+  if (normalizeAddress(submittedAddress) !== proofAddress) {
+    throw new AppError("UNAUTHORIZED", "That wallet proof was issued for a different address.");
+  }
+}
+
 function randomNonce(): string {
   return randomBytes(16).toString("hex");
 }

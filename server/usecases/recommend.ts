@@ -174,6 +174,10 @@ export async function recommend(userId: string, input: RecommendInput): Promise<
     );
   }
 
+  const hasVerifiedEvidence = credibility.hasVerifiedEvidence;
+  const scoringScore = hasVerifiedEvidence ? credibility.verifiedScore : credibility.score;
+  const scoringResolved = hasVerifiedEvidence ? credibility.verifiedResolved : credibility.resolved;
+
   if (credibility.resolved === 0) {
     warnings.push({
       kind: "credibility",
@@ -183,10 +187,22 @@ export async function recommend(userId: string, input: RecommendInput): Promise<
     });
     reasons.push("Credibility score is 0 because the analyst has no resolved history.");
   } else {
-    reasons.push(
-      `Analyst credibility ${credibility.score}/100 from ${credibility.resolved} resolved picks ` +
-        `(win rate ${(credibility.winRate * 100).toFixed(1)}%, Brier ${credibility.meanBrier?.toFixed(3) ?? "n/a"}).`,
-    );
+    if (hasVerifiedEvidence) {
+      reasons.push(
+        `Verified credibility ${credibility.verifiedScore}/100 from ${credibility.verifiedResolved} oracle-confirmed picks ` +
+          `(the owner's own record is ${credibility.score}/100 across ${credibility.resolved}).`,
+      );
+    } else {
+      reasons.push(
+        `Analyst credibility ${credibility.score}/100 from ${credibility.resolved} self-attested picks; no oracle-confirmed outcome yet.`,
+      );
+      warnings.push({
+        kind: "credibility",
+        message: "No oracle-confirmed outcome yet — the credibility score is self-attested.",
+        evidence: credibility.resolved,
+        memory: null,
+      });
+    }
     if (credibility.meanBrier !== null && credibility.meanBrier > 0.25) {
       warnings.push({
         kind: "calibration",
@@ -197,7 +213,7 @@ export async function recommend(userId: string, input: RecommendInput): Promise<
     }
   }
 
-  let verdict = verdictFromCredibility(credibility.score, credibility.resolved);
+  let verdict = verdictFromCredibility(scoringScore, scoringResolved);
   const baseVerdict = verdict;
 
   if (warnings.some((warning) => warning.kind === "bias" && warning.evidence >= 2)) {
@@ -211,7 +227,7 @@ export async function recommend(userId: string, input: RecommendInput): Promise<
 
   const confidence = Math.max(
     0.05,
-    Math.min(0.95, 0.35 + credibility.score / 200 - warnings.length * 0.05),
+    Math.min(0.95, 0.35 + scoringScore / 200 - warnings.length * 0.05),
   );
 
   const uniqueCitations = [

@@ -6,6 +6,7 @@ import {
   parseOracleRef,
   parseSelection,
   teamMatches,
+  verificationForClaim,
 } from "@/integrations/oracle/results";
 
 describe("parseOracleRef", () => {
@@ -63,10 +64,20 @@ describe("parseSelection", () => {
 });
 
 describe("normalizeTeamName", () => {
-  it("strips club suffixes so short and long forms agree", () => {
+  it("strips generic club suffixes so short and long forms agree", () => {
     expect(normalizeTeamName("Arsenal FC")).toBe("arsenal");
-    expect(normalizeTeamName("Newcastle United")).toBe("newcastle");
     expect(normalizeTeamName("Brighton & Hove Albion")).toBe("brighton and hove albion");
+  });
+
+  it("keeps the words that distinguish two clubs", () => {
+    expect(normalizeTeamName("Manchester United")).toBe("manchester united");
+    expect(normalizeTeamName("Manchester City")).toBe("manchester city");
+    expect(normalizeTeamName("Newcastle United")).toBe("newcastle united");
+  });
+
+  it("expands the common abbreviations instead of deleting them", () => {
+    expect(normalizeTeamName("Man Utd")).toBe("manchester united");
+    expect(normalizeTeamName("Man City")).toBe("manchester city");
   });
 });
 
@@ -78,14 +89,43 @@ describe("teamMatches", () => {
 
   it("matches when the picker wrote the longer form", () => {
     expect(teamMatches("manchester city", "Man City")).toBe(true);
+    expect(teamMatches("Man Utd", "Manchester United")).toBe(true);
+  });
+
+  it("does not confuse the two Manchester clubs", () => {
+    expect(teamMatches("Man Utd", "Manchester City")).toBe(false);
+    expect(teamMatches("Man City", "Manchester United")).toBe(false);
+  });
+
+  it("flags a one-word name that fits both sides as ambiguous", () => {
+    expect(teamMatches("United", "Manchester United")).toBe(true);
+    expect(teamMatches("United", "Newcastle United")).toBe(true);
   });
 
   it("refuses names that share no significant token", () => {
     expect(teamMatches("arsenal", "Chelsea")).toBe(false);
+    expect(teamMatches("manchester united", "manchester city")).toBe(false);
   });
 
   it("refuses empty names instead of matching everything", () => {
     expect(teamMatches("", "Arsenal")).toBe(false);
     expect(teamMatches("Arsenal", "FC")).toBe(false);
+  });
+});
+
+describe("verificationForClaim", () => {
+  it("confirms an honest claim", () => {
+    expect(verificationForClaim("win", "win")).toBe("oracle_verified");
+    expect(verificationForClaim("loss", "loss")).toBe("oracle_verified");
+  });
+
+  it("contradicts a claim the provider disagrees with", () => {
+    expect(verificationForClaim("win", "loss")).toBe("oracle_contradicted");
+    expect(verificationForClaim("loss", "win")).toBe("oracle_contradicted");
+  });
+
+  it("does not grant a void claim a free pass on a completed fixture", () => {
+    expect(verificationForClaim("void", "win")).toBe("oracle_contradicted");
+    expect(verificationForClaim("void", "loss")).toBe("oracle_contradicted");
   });
 });

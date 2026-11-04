@@ -50,7 +50,12 @@ export async function GET(request: Request): Promise<Response> {
   });
 }
 
-const publishRequestSchema = publishSignalSchema;
+/*
+ * The settlement digest is produced by `authorizePayment` below, not supplied by the
+ * client, so the request schema must not require it. Requiring it rejected every listing
+ * that reached validation, even after a successful payment.
+ */
+const publishRequestSchema = publishSignalSchema.omit({ digest: true });
 
 /**
  * Publishes a signal. Two gates, in this order:
@@ -68,16 +73,13 @@ export async function POST(request: NextRequest): Promise<Response> {
 
     const seller = await requireSellerUserId();
 
-    const authorization = await authorizePayment(request);
-    if (authorization.kind === "payment-required") {
-      return paymentResponse(authorization.result.response, requestId);
-    }
-
-    const digest = authorization.settlement.transaction;
-    if (!digest) {
-      throw new AppError("PAYMENT_NOT_VERIFIED", "The listing settlement returned no digest.");
-    }
-
+    /*
+     * Validate the listing before the fee is settled. `authorizePayment` calls the
+     * facilitator, which moves the seller's money; running it first meant a malformed
+     * body was rejected only after the listing fee had already been paid, with no listing
+     * and no refund. The body does not influence the payment requirements, so reading it
+     * first is safe.
+     */
     const raw: unknown = await request.json().catch(() => null);
     const parsed = publishRequestSchema.safeParse(raw);
     if (!parsed.success) {
@@ -87,6 +89,16 @@ export async function POST(request: NextRequest): Promise<Response> {
           message: issue.message,
         })),
       });
+    }
+
+    const authorization = await authorizePayment(request);
+    if (authorization.kind === "payment-required") {
+      return paymentResponse(authorization.result.response, requestId);
+    }
+
+    const digest = authorization.settlement.transaction;
+    if (!digest) {
+      throw new AppError("PAYMENT_NOT_VERIFIED", "The listing settlement returned no digest.");
     }
 
     const published = await publishSignal(seller, { ...parsed.data, digest });

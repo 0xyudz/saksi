@@ -51,7 +51,7 @@ imports either one; the relayer uses them.
 | TypeScript 5.9.3 (`strict`, no `any`)           | `noUncheckedIndexedAccess`, `noImplicitOverride`, `noFallthroughCasesInSwitch` all on. |
 | ESLint 9 + `eslint-config-next` 16.4.3          | `no-explicit-any`, `no-console`, `no-empty` (catch included), `eqeqeq` as errors.      |
 | Prettier 3.9.10 + `prettier-plugin-tailwindcss` | Formatting, including class ordering.                                                  |
-| Vitest 5.0.5                                    | Unit tests for pure functions only. 125 tests across 15 files.                         |
+| Vitest 5.0.5                                    | Unit tests for pure functions only. 140 tests across 17 files.                         |
 | `tsx` 4.20.6                                    | Runs the verification scripts without a build step.                                    |
 | Drizzle Kit 0.31.11                             | Migration generation and application.                                                  |
 
@@ -988,31 +988,31 @@ and the footer.
 
 ### Routes
 
-| Route                           | Auth                   | Notes                                                                   |
-| ------------------------------- | ---------------------- | ----------------------------------------------------------------------- |
-| `GET /api/session`              | optional               | Current user plus `hasRecovery`.                                        |
-| `PUT /api/session`              | origin-checked         | Issue a single-use challenge for claim, login or bind.                  |
-| `POST /api/session`             | origin-checked         | Claim a handle with the wallet signature; returns the code once, `201`. |
-| `POST /api/session/wallet`      | origin-checked         | Sign in with the wallet already bound to a journal.                     |
-| `POST /api/session/wallet/bind` | origin-checked         | Bind a wallet to an existing journal; one-way, `409` if already bound.  |
-| `PATCH /api/session`            | origin-checked, 10/min | Resume with handle + code.                                              |
-| `DELETE /api/session`           | origin-checked         | Log out.                                                                |
-| `GET /api/picks`                | optional               | Feed, `?mine=true`, redacted per viewer.                                |
-| `POST /api/picks`               | session                | Seal a pick; rolls back on memory failure.                              |
-| `GET /api/picks/[id]`           | optional               | Single pick, redacted per viewer.                                       |
-| `POST /api/picks/[id]/reveal`   | owner                  | Hash + time-lock checked.                                               |
-| `POST /api/picks/[id]/resolve`  | owner                  | Oracle consulted when the pick carries a fixture ref; `201`.            |
-| `GET /api/oracle/fixtures`      | session                | Fixtures for one league/date so a picker can link a real match.         |
-| `GET /api/analysts`             | public                 | Leaderboard.                                                            |
-| `POST /api/analysts`            | session                | Create an analyst; duplicate → `409`.                                   |
-| `POST /api/recommendations`     | session                | Recall before deciding; persists citations; `201`.                      |
-| `POST /api/memory/preferences`  | session                | Write a preference memory; `201` with a blob id.                        |
-| `GET /api/signals`              | public                 | Marketplace; only fee-verified listings appear.                         |
-| `POST /api/signals`             | wallet proof, 10/min   | x402 listing fee, then publish; `403` without a proven wallet.          |
-| `GET /api/signals/[id]`         | x402 payment, 30/min   | Paywall; Tatum verification before release.                             |
-| `GET /api/payments`             | public                 | Ledger plus merchant balance and events.                                |
-| `POST /api/payments/verify`     | origin-checked, 10/min | Read-only digest check; never inserts.                                  |
-| `GET /api/health`               | public                 | Database + Walrus + Tatum; `503` if any fails; no secrets.              |
+| Route                           | Auth                   | Notes                                                                              |
+| ------------------------------- | ---------------------- | ---------------------------------------------------------------------------------- |
+| `GET /api/session`              | optional               | Current user plus `hasRecovery`.                                                   |
+| `PUT /api/session`              | origin-checked         | Issue a single-use challenge for claim, login or bind.                             |
+| `POST /api/session`             | origin-checked         | Claim a handle with the wallet signature; returns the code once, `201`.            |
+| `POST /api/session/wallet`      | origin-checked         | Sign in with the wallet already bound to a journal.                                |
+| `POST /api/session/wallet/bind` | origin-checked         | Bind a wallet to an existing journal; one-way, `409` if already bound.             |
+| `PATCH /api/session`            | origin-checked, 10/min | Resume with handle + code.                                                         |
+| `DELETE /api/session`           | origin-checked         | Log out.                                                                           |
+| `GET /api/picks`                | optional               | Feed, `?mine=true`, redacted per viewer.                                           |
+| `POST /api/picks`               | session                | Seal a pick; rolls back on memory failure.                                         |
+| `GET /api/picks/[id]`           | optional               | Single pick, redacted per viewer.                                                  |
+| `POST /api/picks/[id]/reveal`   | owner                  | Hash + time-lock checked.                                                          |
+| `POST /api/picks/[id]/resolve`  | owner                  | Oracle consulted when the pick carries a fixture ref; `201`.                       |
+| `GET /api/oracle/fixtures`      | session                | Fixtures for one league/date so a picker can link a real match.                    |
+| `GET /api/analysts`             | public                 | Leaderboard.                                                                       |
+| `POST /api/analysts`            | session                | Create an analyst; duplicate → `409`.                                              |
+| `POST /api/recommendations`     | session                | Recall before deciding; persists citations; `201`.                                 |
+| `POST /api/memory/preferences`  | session                | Write a preference memory; `201` with a blob id.                                   |
+| `GET /api/signals`              | public                 | Marketplace; only fee-verified listings appear.                                    |
+| `POST /api/signals`             | wallet proof, 10/min   | Validate body, then x402 listing fee, then publish; `403` without a proven wallet. |
+| `GET /api/signals/[id]`         | x402 payment, 30/min   | Paywall; Tatum verification before release.                                        |
+| `GET /api/payments`             | public                 | Ledger plus merchant balance and events.                                           |
+| `POST /api/payments/verify`     | origin-checked, 10/min | Read-only digest check; never inserts.                                             |
+| `GET /api/health`               | public                 | Database + Walrus + Tatum; `503` if any fails; no secrets.                         |
 
 ### The three journeys that matter
 
@@ -1062,7 +1062,7 @@ real forecast.
 
 ## 14. Testing strategy
 
-The suite is deliberately narrow: **125 tests across 15 files, all pure functions.** No
+The suite is deliberately narrow: **140 tests across 17 files, all pure functions.** No
 network, no database, no fake service.
 
 | File                       | What it pins down                                                                                   |
@@ -1137,7 +1137,11 @@ gates are documented in the README Status table and were all run before submissi
 | x402 facilitator unreachable                 | `UPSTREAM_UNAVAILABLE`; no payment is recorded                          | 502       |
 | Listing price below the gasless floor        | Startup refuses the configuration                                       | exit 1    |
 | Publish without a proven wallet              | Refused; caller is signed in but has no payout address                  | 403       |
+| Invalid listing body                         | Rejected before settlement; no listing fee is taken                     | 400       |
+| Login or bind proof names another address    | Refused before the lookup or update                                     | 401       |
 | Oracle contradicts a claimed win             | Stored as `oracle_contradicted`, owner's claim preserved                | 201       |
+| Claimed `void` on a completed fixture        | Stored as `oracle_contradicted`; no free pass to verified               | 201       |
+| `ORACLE_ENABLED=false` at resolve time       | Stored as `self_attested` with a configuration reason                   | 201       |
 | Oracle unreachable at resolve time           | Falls back to `self_attested` with `oracleNote`; never blocks the write | 201       |
 | Digest already used for another signal       | Settlement refused                                                      | 409       |
 | Signed-out write                             | Refused                                                                 | 401       |

@@ -5,7 +5,7 @@ import { getDb } from "@/db/client";
 import { users, type UserRow } from "@/db/schema";
 import { AppError } from "@/lib/errors";
 import { generateRecoveryCode, hashRecoveryCode, verifyRecoveryCode } from "@/lib/recovery-code";
-import { consumeWalletChallenge, normalizeAddress } from "@/server/wallet-auth";
+import { assertProofAddress, consumeWalletChallenge, normalizeAddress } from "@/server/wallet-auth";
 
 export const handleSchema = z
   .string()
@@ -148,13 +148,14 @@ export type LoginWithWalletInput = z.infer<typeof loginWithWalletSchema>;
 export async function loginWithWallet(input: LoginWithWalletInput): Promise<UserRow> {
   const address = normalizeAddress(input.address);
 
-  await consumeWalletChallenge({
+  const proof = await consumeWalletChallenge({
     nonce: input.nonce,
     signature: input.signature,
     expectedPurpose: "login",
   });
+  assertProofAddress(proof.address, address);
 
-  const user = await findUserByWallet(address);
+  const user = await findUserByWallet(proof.address);
   if (!user) {
     throw new AppError("NOT_FOUND", "No journal is bound to that wallet yet.");
   }
@@ -180,15 +181,16 @@ export type BindWalletInput = z.infer<typeof bindWalletSchema>;
 export async function bindWalletToUser(userId: string, input: BindWalletInput): Promise<UserRow> {
   const address = normalizeAddress(input.address);
 
-  await consumeWalletChallenge({
+  const proof = await consumeWalletChallenge({
     nonce: input.nonce,
     signature: input.signature,
     expectedPurpose: "bind",
   });
+  assertProofAddress(proof.address, address);
 
   const updated = await getDb()
     .update(users)
-    .set({ walletAddress: address, walletBoundAt: new Date() })
+    .set({ walletAddress: proof.address, walletBoundAt: new Date() })
     .where(and(eq(users.id, userId), isNull(users.walletAddress)))
     .returning();
 

@@ -14,10 +14,17 @@ import type { SellerIdentity } from "@/server/auth";
  * A seller sets their own price. The floor is the Sui gasless minimum: a cheaper signal
  * would build a sponsored transaction the network rejects, so the buyer could never pay.
  * The ceiling is a sanity bound, not a policy.
+ *
+ * The value must be a whole number of atomic units. A USD string such as `"0.05"` is
+ * rejected by the regex *before* `BigInt` runs, because converting it inside `transform`
+ * would throw a `SyntaxError` that `safeParse` cannot report and the route would answer
+ * 500 instead of explaining the mistake.
  */
 const priceAtomicSchema = z
   .union([z.string(), z.number()])
-  .transform((value) => BigInt(String(value).trim()))
+  .transform((value) => String(value).trim())
+  .pipe(z.string().regex(/^\d+$/, "price must be a whole number of atomic USDC units"))
+  .transform((value) => BigInt(value))
   .refine((value) => value >= GASLESS_MIN_ATOMIC, {
     message: `price must be at least ${GASLESS_MIN_ATOMIC.toString()} atomic units`,
   })
