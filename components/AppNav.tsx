@@ -32,7 +32,7 @@ export async function AppNav() {
           </span>
         </Link>
 
-        <nav className="hidden items-center gap-1 md:flex">
+        <nav className="hidden items-center gap-1 lg:flex">
           {LINKS.map((link) => (
             <Link
               key={link.href}
@@ -81,7 +81,7 @@ export async function AppNav() {
           <WalletMenu />
         </div>
       </div>
-      <nav className="container-page flex gap-1 overflow-x-auto pb-2 md:hidden">
+      <nav className="container-page flex gap-1 overflow-x-auto pb-2 lg:hidden">
         {LINKS.map((link) => (
           <Link
             key={link.href}

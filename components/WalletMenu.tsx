@@ -1,11 +1,20 @@
 "use client";
 
 import { useDAppKit, useWalletConnection, useWallets } from "@mysten/dapp-kit-react";
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 
 function shortAddress(address: string): string {
   return `${address.slice(0, 6)}…${address.slice(-4)}`;
 }
+
+/**
+ * A store that never changes, used only to ask React whether hydration has finished.
+ * `getServerSnapshot` returns false, so the server and the first client render agree;
+ * after hydration React re-reads `getSnapshot` and returns true.
+ */
+const subscribeToNothing = (): (() => void) => () => {};
+const getHydratedSnapshot = (): boolean => true;
+const getServerHydratedSnapshot = (): boolean => false;
 
 export function WalletMenu() {
   const dAppKit = useDAppKit();
@@ -14,6 +23,18 @@ export function WalletMenu() {
   const [selected, setSelected] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /**
+   * Wallet detection only exists in the browser: the server always sees zero wallets and a
+   * disconnected account, while a browser with an extension sees the wallet on its first
+   * render. That difference is a hydration mismatch on every app page for every wallet user.
+   * Rendering a stable placeholder until hydration completes keeps the first client render
+   * identical to the server's, then swaps in the real wallet state.
+   */
+  const hydrated = useSyncExternalStore(
+    subscribeToNothing,
+    getHydratedSnapshot,
+    getServerHydratedSnapshot,
+  );
 
   async function connect() {
     const wallet = wallets.find((item) => item.name === selected) ?? wallets[0];
@@ -40,6 +61,14 @@ export function WalletMenu() {
     } finally {
       setPending(false);
     }
+  }
+
+  if (!hydrated) {
+    return (
+      <button type="button" className="btn btn-primary h-9 px-3 text-xs" disabled>
+        Connect wallet
+      </button>
+    );
   }
 
   if (connection.isConnected) {
