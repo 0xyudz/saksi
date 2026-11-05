@@ -10,6 +10,7 @@ import { assertWithinRateLimit } from "@/lib/rate-limit";
 import { authorizePayment } from "@/integrations/x402/seller";
 import { optionalApiUserId } from "@/server/auth";
 import { pickForUser } from "@/server/data/picks";
+import { findUserByWallet } from "@/server/data/users";
 import { getSignal } from "@/server/usecases/read-signal";
 import { verifyAndRecordSignalPayment } from "@/server/usecases/purchase-signal";
 
@@ -65,6 +66,22 @@ export async function GET(
       }
       const pick = await pickForUser(pickId.data, userId);
       if (!pick) throw new AppError("NOT_FOUND", "That pick does not belong to this journal.");
+    }
+
+    /*
+     * A seller cannot buy their own listing. Paying yourself settles on chain but moves no
+     * funds, so Tatum correctly sees a payment of zero and refuses to release the payload —
+     * after the buyer has signed a transaction. Rejecting it before the facilitator runs
+     * keeps the wallet prompt from appearing at all.
+     */
+    if (userId !== undefined && signal.payToAddress !== null) {
+      const buyer = await findUserByWallet(signal.payToAddress);
+      if (buyer !== null && buyer.id === userId) {
+        throw new AppError(
+          "CONFLICT",
+          "This listing pays your own wallet, so buying it would move no funds. Use a different wallet to buy.",
+        );
+      }
     }
 
     const authorization = await authorizePayment(request);

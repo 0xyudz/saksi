@@ -78,7 +78,11 @@ export default async function SignalDetailPage({ params }: { params: Promise<{ i
             </p>
 
             {user ? (
-              <PurchaseSignalPanel signalId={signal.id} pickOptions={pickOptions} />
+              <PurchaseSignalPanel
+                signalId={signal.id}
+                payToAddress={signal.payToAddress}
+                pickOptions={pickOptions}
+              />
             ) : (
               <div className="border-amber/30 bg-amber/5 text-amber rounded-xl border p-4 text-sm leading-relaxed">
                 Start a journal before buying a signal. The purchase writes a payment memory and a

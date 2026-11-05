@@ -15,9 +15,12 @@ export interface PurchasePickOption {
 
 export function PurchaseSignalPanel({
   signalId,
+  payToAddress,
   pickOptions,
 }: {
   readonly signalId: string;
+  /** The seller's wallet, which is where this payment goes. */
+  readonly payToAddress: string | null;
   readonly pickOptions: readonly PurchasePickOption[];
 }) {
   const router = useRouter();
@@ -68,6 +71,23 @@ export function PurchaseSignalPanel({
           Saksi never receives your private key.
         </p>
         <WalletMenu />
+      </div>
+    );
+  }
+
+  /*
+   * Paying your own wallet settles on chain but moves nothing, so the verifier would see a
+   * payment of zero and refuse to release the payload. Say so before the wallet prompt
+   * appears instead of letting the buyer sign a transaction that cannot succeed.
+   */
+  if (payToAddress !== null && account.address.toLowerCase() === payToAddress.toLowerCase()) {
+    return (
+      <div className="border-amber/30 bg-amber/5 text-amber space-y-3 rounded-xl border p-4 text-sm leading-relaxed">
+        <p className="mono text-[11px] break-all">paying from {account.address}</p>
+        <p>
+          This listing pays the wallet you are connected with, so buying it would move no funds and
+          the settlement would verify as zero. Disconnect and buy with a different wallet.
+        </p>
       </div>
     );
   }
