@@ -132,8 +132,19 @@ export interface CreatedJournal {
  * Creates a journal for a proven wallet.
  *
  * The signature is verified before anything is written, so an unproven address never
- * reaches the relayer. There is no insert and therefore no conflict to report: claiming a
- * handle twice is allowed, and claiming an address twice is impossible.
+ * reaches the relayer.
+ *
+ * A wallet that already has a journal is refused rather than given a second one. This is the
+ * check-then-write that handle uniqueness could not have, and it is safe here for a reason
+ * worth stating: the *wallet* is the key, so the only two writers that can race are two
+ * sessions holding the same private key — that is one user, not two. A race therefore
+ * produces a duplicate record for the same ref, which is harmless; what it can never produce
+ * is two journals merging, because the namespace is derived from the wallet, not the handle.
+ *
+ * Without this check a second claim succeeds, writes a *second* identity record with a
+ * different ref, and the journal's history splits across two namespaces: the first claim's
+ * memories stay in `saksi:<uuid>`, and everything written afterwards goes to `saksi:<wallet>`.
+ * That happened once in this project's own live data, which is why the check exists.
  */
 export async function claimJournal(input: ClaimJournalInput): Promise<CreatedJournal> {
   const wallet = normalizeWalletRef(input.address);
@@ -148,6 +159,14 @@ export async function claimJournal(input: ClaimJournalInput): Promise<CreatedJou
     throw new AppError("UNAUTHORIZED", "That wallet proof was issued for a different handle.");
   }
   assertProofAddress(proof.address, wallet);
+
+  const existing = await readJournalRecord(wallet);
+  if (existing !== null) {
+    throw new AppError(
+      "CONFLICT",
+      "That wallet already has a journal. Sign in instead of claiming a second one.",
+    );
+  }
 
   const createdAt = new Date().toISOString();
   const recoveryCode = generateRecoveryCode();

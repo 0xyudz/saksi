@@ -3,7 +3,7 @@ import { MemWal } from "@mysten-incubation/memwal";
 import type { MemoryCitation } from "@/lib/domain";
 import { getEnv } from "@/lib/env";
 import { AppError } from "@/lib/errors";
-import { recoveryNamespace, walletNamespace } from "@/lib/journal-identity";
+import { oldestJournalRecord, recoveryNamespace, walletNamespace } from "@/lib/journal-identity";
 import {
   buildJournalMemory,
   buildPreferenceMemory,
@@ -118,21 +118,41 @@ export async function rememberJournal(input: {
   };
 }
 
-/** Reads a journal's identity record by wallet, or null when that wallet has no journal. */
+/**
+ * Reads a journal's identity record by wallet, or null when that wallet has no journal.
+ *
+ * The namespace *should* hold exactly one record, and `claimJournal` now refuses a second
+ * claim so that stays true. It did not always: a wallet could be claimed twice, and this
+ * namespace then holds two records pointing at different refs. Picking whichever the relayer
+ * happened to rank first would move the journal between namespaces between requests, so the
+ * oldest record wins — the journal was created then, and later records are duplicates.
+ *
+ * `createdAt` is an ISO-8601 timestamp, so string comparison is chronological.
+ */
 export async function readJournalRecord(wallet: string): Promise<{
   ref: string;
   wallet: string;
   handle: string;
+  createdAt: string;
 } | null> {
   const namespace = walletNamespace(getEnv().WALRUS_MEMORY_NAMESPACE_PREFIX, wallet);
-  const { hits } = await recallNamespace(namespace, "journal identity handle", 10);
+  const { hits } = await recallNamespace(namespace, "journal identity handle", 20);
 
-  for (const hit of hits) {
-    if (hit.memory?.kind === "journal") {
-      return { ref: hit.memory.ref, wallet: hit.memory.wallet, handle: hit.memory.handle };
-    }
-  }
-  return null;
+  const records = hits
+    .map((hit) => hit.memory)
+    .filter(
+      (memory): memory is Extract<NonNullable<typeof memory>, { kind: "journal" }> =>
+        memory !== null && memory.kind === "journal",
+    );
+
+  const oldest = oldestJournalRecord(records);
+  if (oldest === null) return null;
+  return {
+    ref: oldest.ref,
+    wallet: oldest.wallet,
+    handle: oldest.handle,
+    createdAt: oldest.createdAt,
+  };
 }
 
 /**

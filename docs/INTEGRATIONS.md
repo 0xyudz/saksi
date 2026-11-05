@@ -361,9 +361,10 @@ ones recorded at the time of writing rather than constants.
 | Reconstruction         | `mismatches: 0` - credibility rebuilt from memory agrees with Postgres for every analyst                                       | `pnpm verify:reconstruct` |
 | Memory changes verdict | bias memory `2 of 2 underdog picks (odds >= 2.5) lost` moved a live verdict from `proceed` to `reduce`                         | `pnpm demo:seed`          |
 | Tatum checkpoint       | `341329560` (advances; any recent value proves the query)                                                                      | `pnpm verify:tatum`       |
-| Tatum transaction      | `DemaKkYM7Ni4mRJcxbth3e4h3BkkqgKnR1MYPdWhmgjq`, status `success`, 2 balance changes                                            | `pnpm verify:tatum`       |
-| Tatum balance          | operator agent `0` atomic USDC; merchant `10000` after settlement                                                              | `pnpm verify:tatum`       |
-| x402 settlement        | one real $0.01 USDC purchase, paid by a self-custody browser wallet and verified through Tatum before the payload was released | browser + `payments`      |
+| Tatum transaction      | `CKgJSeWX2bDSiNBX2As7MefLqdjLAsgjJKq1ArovUt7Z`, status `success`, 2 balance changes                                            | `pnpm verify:tatum`       |
+| Tatum balance          | operator agent `0` atomic USDC; merchant `60000` after settlement (was `50000`)                                                | `pnpm verify:tatum`       |
+| x402 settlement        | one real $0.01 USDC purchase on `sui:mainnet`, paid by a self-custody browser wallet and verified through Tatum before release | browser + `payments`      |
+| Settlement resource    | `https://saksi-psi.vercel.app/api/signals/4047410e-…` — first settlement recorded from the live deployment                     | `payments.resource`       |
 | Oracle fixtures        | 8 completed `eng.1` fixtures on 2026-10-31, each resolving to exactly one winner, including two draws                          | `pnpm verify:oracle`      |
 | Oracle agreement       | "Chelsea to win" on `espn:eng.1:401879248` (Chelsea 2-0 Man Utd) stored as `oracle_verified`                                   | `outcomes`                |
 | Oracle contradiction   | a claimed win on a fixture the provider made a loss stored as `oracle_contradicted`, owner's claim preserved                   | `outcomes`                |
@@ -375,8 +376,14 @@ ones recorded at the time of writing rather than constants.
   shares the same client and seller route but has no recorded run of its own.
 - No signal has been published through the paid listing flow on mainnet yet, so the listing
   fee has a verified challenge but no recorded settlement.
-- No public deployment exists, so settlement `resource.url` values point at
-  `http://localhost:3000`.
+- The recorded settlement is **not** buyer → seller. Signal `4047410e-…` is a legacy catalogue
+  row with `sellerRef` and `payToAddress` both `null`, so the payment went to the platform
+  address. It proves the x402 path end to end on the live deployment; a seller-paid purchase
+  needs listing `29db37cb-…` (0.05 USDC, `payToAddress` set) and that digest is
+  `not captured`.
+- Settlement `resource.url` values recorded before the first deploy point at
+  `http://localhost:3000`. They remain valid receipts, but new settlements are recorded
+  against `APP_BASE_URL`.
 - The catalogue signal used for the recorded purchase is a synthetic demo payload, not a
   real forecast product.
 - Oracle coverage is one league (`eng.1`) and match-winner markets. Every other market stays

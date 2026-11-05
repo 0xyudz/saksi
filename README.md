@@ -16,7 +16,7 @@ Built for **Total Recall — Tatum × Walrus Memory** (Track 1: Markets & Sports
 | ------------------------------------- | ---------------------------------------------------------------------------- |
 | `pnpm typecheck`                      | passes                                                                       |
 | `pnpm lint`                           | passes                                                                       |
-| `pnpm test`                           | 163 tests pass across 19 files                                               |
+| `pnpm test`                           | 166 tests pass across 19 files                                               |
 | `pnpm build`                          | passes (Next.js 16.4.3, Turbopack)                                           |
 | Migrations applied to a live database | yes — 7 tables on a live Postgres instance (`0000`–`0007`)                   |
 | Walrus Memory (mainnet relayer)       | verified — `pnpm verify:memory` writes, recalls and lists real blobs         |
@@ -466,13 +466,13 @@ re-running `verify:memory` proves the same path with fresh values.
 | Reconstruction from Walrus          | `mismatches: 0` - rebuilt credibility equals the Postgres figures for every analyst               | `pnpm verify:reconstruct`        |
 | Memory changes a verdict            | bias memory `2 of 2 underdog picks (odds >= 2.5) lost` moved `proceed` -> `reduce` on a live call | `pnpm demo:seed`                 |
 | Tatum checkpoint                    | `341329560` (advances; any recent value proves the query)                                         | `pnpm verify:tatum`              |
-| Tatum transaction digest            | `DemaKkYM7Ni4mRJcxbth3e4h3BkkqgKnR1MYPdWhmgjq` — status `success`, 2 balance changes              | `pnpm verify:tatum`              |
-| x402 settlement digest              | `DemaKkYM7Ni4mRJcxbth3e4h3BkkqgKnR1MYPdWhmgjq` — 10000 atomic USDC, `sui:mainnet`                 | browser wallet + Tatum           |
+| Tatum transaction digest            | `CKgJSeWX2bDSiNBX2As7MefLqdjLAsgjJKq1ArovUt7Z` — status `success`, 2 balance changes              | `pnpm verify:tatum`              |
+| x402 settlement digest              | `CKgJSeWX2bDSiNBX2As7MefLqdjLAsgjJKq1ArovUt7Z` — 10000 atomic USDC, `sui:mainnet`                 | browser wallet + Tatum           |
 | x402 payer                          | `0xe47cc1da1a36461dbfbc2431b36b8579403d105d8d2a6fe05c442071905d8900`                              | `payments`                       |
 | x402 merchant                       | `0x5fb8e783752ba7ec09ee4c7c7a91bb51a4a643cd8a7473643a95c1a56b7e6432`                              | `.env.local` payee               |
-| Merchant USDC balance after settle  | `10000` atomic ($0.01)                                                                            | Tatum GraphQL                    |
-| Agent (operator) USDC balance       | `0` — the operator key never paid; the buyer did                                                  | `pnpm verify:tatum`              |
-| Explorer link                       | <https://suivision.xyz/txblock/DemaKkYM7Ni4mRJcxbth3e4h3BkkqgKnR1MYPdWhmgjq>                      | chain                            |
+| Merchant USDC balance after settle  | `60000` atomic ($0.06, was `50000` before this settlement)                                        | Tatum GraphQL                    |
+| Settlement resource                 | `https://saksi-psi.vercel.app/api/signals/4047410e-…` — first settlement from the live deployment | `payments.resource`              |
+| Explorer link                       | <https://suivision.xyz/txblock/CKgJSeWX2bDSiNBX2As7MefLqdjLAsgjJKq1ArovUt7Z>                      | chain                            |
 | Oracle fixtures read                | 8 completed `eng.1` fixtures on 2026-10-31, each resolving to exactly one winner                  | `pnpm verify:oracle`             |
 | Oracle verified outcome             | pick `a228a98a…` — "Chelsea to win", provider `Chelsea 2-0 Manchester United`, `oracle_verified`  | `outcomes`                       |
 | Oracle contradicted outcome         | pick `ae1de891…` — claimed win, provider made it a loss, stored `oracle_contradicted`             | `outcomes`                       |
@@ -498,6 +498,15 @@ digest returns the existing row instead of charging twice.
 The signal behind that settlement is a catalogue row whose payload is labelled **synthetic
 demo payload** everywhere it appears. It exists to exercise the paywall, not to claim a real
 forecast was sold.
+
+**What that digest proves, and what it does not.** It proves the whole x402 path runs on the
+live deployment: a real wallet signed, the settlement moved `10000` atomic USDC on
+`sui:mainnet`, Tatum confirmed the transfer, the payload was released, and the memory write
+followed. It does **not** prove buyer → seller payment. Signal `4047410e-…` is a legacy
+catalogue row with `sellerRef` and `payToAddress` both `null`, so the money went to the
+platform address, not to another user's proven wallet. A seller-paid purchase needs a listing
+with a `payToAddress`; `29db37cb-…` is that listing, and its settlement digest is
+`not captured`.
 
 Some of those memories came from the end-to-end checks above, whose journals were deleted
 afterwards. Walrus blobs cannot be deleted once written, so the memory count is higher than
@@ -550,10 +559,15 @@ only record, which is exactly what `listNamespaces()` reads.
   recovered: `sealed` picks stay sealed forever. Journals created before this existed can be
   given a code by an operator with `pnpm recovery:issue <wallet> <file>`, which is a CLI
   rather than an endpoint so nobody can mint a code for someone else's wallet.
-- The handle is a display name, not a claim. Two journals may show the same `@name`; what is
-  unique is the wallet, because the wallet is the ref and cannot be shared without sharing a
-  private key. This was chosen over unique handles because Walrus has no unique constraint,
-  and a check-then-write race on a handle would merge two journals into one namespace.
+- The handle is a display name, not a claim. Two journals may show the same `@name`. This was
+  chosen over unique handles because Walrus has no unique constraint, and a check-then-write
+  race on a handle would merge two journals into one namespace.
+- A wallet can only claim one journal: `claimJournal` refuses an address that already has an
+  identity record, because a second claim writes a second ref and splits the journal's
+  history across two namespaces. That check-then-write is safe here for a reason handle
+  uniqueness lacked — the wallet _is_ the key, so two racing writers hold the same private
+  key. The lookup is also deterministic (oldest record wins) so a wallet that already has
+  duplicates keeps one stable ref.
 - Publishing is open to any journal with a proven wallet and is rate limited to 10 requests
   per minute. Buying a listed signal is open to anyone with a wallet.
 - The in-memory rate limiter is not shared between server instances.

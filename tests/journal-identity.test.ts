@@ -5,6 +5,7 @@ import {
   isLegacyRef,
   isWalletRef,
   normalizeWalletRef,
+  oldestJournalRecord,
   recoveryLookupKey,
   recoveryNamespace,
   walletNamespace,
@@ -89,5 +90,35 @@ describe("wallet namespace", () => {
     const data = `${PREFIX}:${LEGACY}`;
     expect(identity).not.toBe(data);
     expect(identity.startsWith(`${PREFIX}:wallet:`)).toBe(true);
+  });
+});
+
+describe("resolving a wallet with duplicate identity records", () => {
+  /*
+   * A wallet could be claimed twice before `claimJournal` refused it, leaving two records
+   * with different refs. The ref decides the namespace, so the choice has to be stable:
+   * otherwise one journal's history splits across two namespaces.
+   */
+  it("returns the oldest record, whatever order the relayer returns them in", () => {
+    const older = { ref: LEGACY, createdAt: "2026-11-05T15:26:13.289Z" };
+    const newer = { ref: WALLET, createdAt: "2026-11-05T18:19:54.767Z" };
+
+    expect(oldestJournalRecord([newer, older])).toBe(older);
+    expect(oldestJournalRecord([older, newer])).toBe(older);
+  });
+
+  it("returns null when a wallet has no identity record", () => {
+    expect(oldestJournalRecord([])).toBeNull();
+  });
+
+  it("is unaffected by the relayer's relevance ranking", () => {
+    // `recall()` is a similarity search, so the "best" hit is not the "first" one. Three
+    // records in an arbitrary order must still resolve to the earliest.
+    const records = [
+      { ref: "c", createdAt: "2026-11-05T18:00:00.000Z" },
+      { ref: "a", createdAt: "2026-11-05T15:00:00.000Z" },
+      { ref: "b", createdAt: "2026-11-05T16:00:00.000Z" },
+    ];
+    expect(oldestJournalRecord(records)?.ref).toBe("a");
   });
 });

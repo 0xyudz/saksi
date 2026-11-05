@@ -92,3 +92,36 @@ export function recoveryNamespace(prefix: string, code: string): string {
 export function walletNamespace(prefix: string, wallet: string): string {
   return `${prefix}:wallet:${wallet}`;
 }
+
+/** The fields of an identity record that this selector needs. */
+export interface JournalRecordLike {
+  readonly ref: string;
+  readonly createdAt: string;
+}
+
+/**
+ * Picks the identity record that a wallet should resolve to.
+ *
+ * A wallet is supposed to have exactly one, and `claimJournal` now refuses a second claim so
+ * that stays true. It did not always hold: a wallet could be claimed twice, leaving two
+ * records that point at different refs. Because the ref decides the namespace, resolving to
+ * whichever the relayer happened to rank first would move the journal between namespaces
+ * between requests.
+ *
+ * The oldest record wins. A journal's identity was established at its first claim, and every
+ * later record is a duplicate. `createdAt` is ISO-8601, so comparing it as a string is
+ * chronological.
+ *
+ * Kept pure and separate from the relayer so the ordering rule is unit tested.
+ */
+export function oldestJournalRecord<T extends JournalRecordLike>(
+  records: ReadonlyArray<T>,
+): T | null {
+  let oldest: T | null = null;
+  for (const record of records) {
+    if (oldest === null || record.createdAt.localeCompare(oldest.createdAt) < 0) {
+      oldest = record;
+    }
+  }
+  return oldest;
+}

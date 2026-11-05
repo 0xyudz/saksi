@@ -270,17 +270,44 @@ no amount of care fixes:
 **What was adopted instead.** The identity is the wallet address, and the handle is a display
 name:
 
-| Concern           | Guarantee                                                                                       |
-| ----------------- | ----------------------------------------------------------------------------------------------- |
-| Wallet uniqueness | Free. The wallet _is_ the ref, and two journals cannot share one without sharing a private key. |
-| Handle uniqueness | **Given up on purpose.** Two journals may show the same handle.                                 |
-| Login lookup      | Exact-key: `saksi:wallet:<address>` holds the identity record.                                  |
-| Recovery lookup   | Exact-key: `saksi:recovery:<sha256(code)>` holds the journal pointer.                           |
+| Concern           | Guarantee                                                                        |
+| ----------------- | -------------------------------------------------------------------------------- |
+| Wallet uniqueness | Enforced by a read before the write, not by the store. See the correction below. |
+| Handle uniqueness | **Given up on purpose.** Two journals may show the same handle.                  |
+| Login lookup      | Exact-key: `saksi:wallet:<address>` holds the identity record.                   |
+| Recovery lookup   | Exact-key: `saksi:recovery:<sha256(code)>` holds the journal pointer.            |
 
 Giving up handle uniqueness is the deliberate part. A handle authorises nothing now, so a
 duplicate is cosmetic — two people both calling themselves `@saksi_dev` is a display problem.
 A race that merges two journals is a data-integrity problem. Trading the first for the
 second is the right direction, and the code says so where it matters.
+
+**Correction: wallet uniqueness is not free.** The first version of this section claimed that
+"the wallet _is_ the ref, so two journals cannot share one without sharing a private key".
+That is true of the _name_ and false of the _store_: nothing stopped the same wallet from
+being claimed twice. `claimJournal()` wrote a second identity record with the same wallet and
+a new ref, `readJournalRecord()` returned whichever record the relayer ranked first, and
+because the ref decides the namespace, one journal's history ended up split across
+`saksi:<uuid>` and `saksi:<wallet>`.
+
+It happened in this project's own live data: wallet `0xe47cc1da…` held two records
+(`1240e27d-…` as `@saksi_dev`, then `0xe47cc1da…` as `@saksi_demo`), with `payment` and
+`source_roi` memories in one namespace and `journal` and `preference` in the other.
+
+Two changes fix it, and the asymmetry between them is the interesting part:
+
+- **`claimJournal()` now refuses a wallet that already has an identity record** (`409`). This
+  is a check-then-write, which section 3.8 argued is unsafe. It is safe here for a specific
+  reason: the wallet is the key, so the only two writers that can race hold the same private
+  key — that is one user, not two. A lost race produces a duplicate record for the same ref,
+  which is harmless. What a lost race can never produce is two _different_ refs, because the
+  ref is derived from the wallet, not from user input.
+- **`readJournalRecord()` is deterministic.** It resolves to the oldest record
+  (`oldestJournalRecord()` in `lib/journal-identity.ts`, unit tested), so a wallet that already
+  has duplicates keeps one stable ref instead of flipping between namespaces per request.
+
+The lesson is worth keeping: "the key is unique" and "the store enforces uniqueness" are
+different claims, and only the second one survives a retry.
 
 **What it cost.** `/onboarding` no longer checks whether a name is taken, and the UI says so
 explicitly instead of implying a claim. `GET /api/session` cannot warn about a lost recovery
@@ -1262,6 +1289,7 @@ gates are documented in the README Status table and were all run before submissi
 | Publish from a legacy uuid journal           | Refused; it has no wallet to be paid at                                 | 403       |
 | Invalid listing body                         | Rejected before settlement; no listing fee is taken                     | 400       |
 | Login proof names another address            | Refused before the lookup                                               | 401       |
+| Claim a wallet that already has a journal    | Refused; sign in instead, so history cannot split across two namespaces | 409       |
 | Oracle contradicts a claimed win             | Stored as `oracle_contradicted`, owner's claim preserved                | 201       |
 | Claimed `void` on a completed fixture        | Stored as `oracle_contradicted`; no free pass to verified               | 201       |
 | `ORACLE_ENABLED=false` at resolve time       | Stored as `self_attested` with a configuration reason                   | 201       |
@@ -1300,8 +1328,15 @@ substitutes sample data, a cached success, or a placeholder row.
   fee has a verified `402` challenge but no recorded settlement digest.
 - `pnpm verify:x402` has not been run against mainnet; the recorded purchase was made with a
   browser wallet. That row is marked as such in `docs/INTEGRATIONS.md`.
-- No public deployment existed when the proof table was written, so recorded settlement
-  `resource.url` values point at `http://localhost:3000`.
+- The recorded settlement is **not** buyer → seller. Signal `4047410e-…` is a legacy catalogue
+  row (`sellerRef` and `payToAddress` both `null`), so the `10000` atomic USDC went to the
+  platform address. The digest proves the x402 path end to end on the live deployment — real
+  wallet signature, mainnet transfer, Tatum verification, payload release, memory write — but
+  not a payment from one user to another. That needs listing `29db37cb-…` and its digest is
+  `not captured`.
+- Settlement `resource.url` values recorded before the first deploy point at
+  `http://localhost:3000`. They remain valid receipts for those payments; the latest
+  settlement is recorded against `APP_BASE_URL`.
 
 ---
 
