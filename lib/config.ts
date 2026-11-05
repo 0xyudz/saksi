@@ -42,6 +42,16 @@ export const TATUM_REQUEST_TIMEOUT_MS = 15_000;
 export const TATUM_MAX_ATTEMPTS = 3;
 export const TATUM_RETRY_BASE_DELAY_MS = 400;
 
+/**
+ * How long a caller may wait for a freshly settled digest to become readable.
+ *
+ * Tatum indexes a new Sui transaction with a lag of a few seconds, so a digest returned
+ * by the facilitator is routinely absent on the first read. The lag is measured in
+ * seconds, not milliseconds: polling three times within a second finds nothing and turns
+ * a successful payment into a user-visible failure.
+ */
+export const TATUM_INDEXING_WAIT_MS = 25_000;
+
 /** Explorer hosts for Sui. Protocol constants, not deploy-specific. */
 const EXPLORERS: Record<SuiNetwork, string> = {
   "sui:mainnet": "https://suivision.xyz",

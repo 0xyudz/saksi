@@ -101,7 +101,27 @@ export async function POST(request: NextRequest): Promise<Response> {
       throw new AppError("PAYMENT_NOT_VERIFIED", "The listing settlement returned no digest.");
     }
 
-    const published = await publishSignal(seller, { ...parsed.data, digest });
+    /*
+     * The money has moved at this point. If writing the listing then fails, the error
+     * response must still carry the settlement headers so the browser can learn the
+     * digest and recover the listing it already paid for; without them the fee would be
+     * lost with no way to claim it.
+     */
+    let published;
+    try {
+      published = await publishSignal(seller, { ...parsed.data, digest });
+    } catch (error) {
+      if (error instanceof AppError) {
+        throw new AppError(error.code, error.message, {
+          cause: error,
+          details: error.details,
+          retryable: error.retryable,
+          httpStatus: error.httpStatus,
+          headers: authorization.settlement.headers,
+        });
+      }
+      throw error;
+    }
 
     const headers = new Headers(authorization.settlement.headers);
     headers.set("cache-control", "no-store");

@@ -208,7 +208,6 @@ export function PublishSignalPanel({ handle }: { readonly handle: string }) {
           </div>
         </div>
       ) : null}
-
       <button type="submit" className="btn btn-primary" disabled={pending}>
         {pending ? "Signing, settling, verifying…" : "Pay listing fee & publish"}
       </button>

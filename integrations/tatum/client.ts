@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import {
   SUI_DIGEST_PATTERN,
+  TATUM_INDEXING_WAIT_MS,
   TATUM_MAX_ATTEMPTS,
   TATUM_REQUEST_TIMEOUT_MS,
   TATUM_RETRY_BASE_DELAY_MS,
@@ -193,6 +194,13 @@ function retryDelay(attempt: number): number {
   return TATUM_RETRY_BASE_DELAY_MS * 2 ** (attempt - 1) + Math.floor(Math.random() * 200);
 }
 
+/**
+ * Delay between reads while waiting for a settled digest to be indexed. The lag is
+ * seconds long, so the interval is measured in seconds too; polling faster only spends
+ * the API key's request budget without finding the transaction any sooner.
+ */
+const INDEXING_POLL_INTERVAL_MS = 2_500;
+
 export function toSuiTransactionBlock(
   transaction: NonNullable<SuiTransactionResponse["transaction"]>,
   balanceChanges: ReadonlyArray<z.infer<typeof rawBalanceChangeSchema>>,
@@ -357,16 +365,25 @@ export class TatumSuiClient {
       throw new AppError("VALIDATION_FAILED", "Invalid Sui transaction digest.");
     }
 
-    const first = await this.execute(
-      TRANSACTION_QUERY,
-      { digest, after: null },
-      suiTransactionResponseSchema,
-    );
-    const transaction = first.result.transaction;
-    if (!transaction) {
-      // A freshly settled digest is not indexed yet. This is eventual consistency, not a
-      // permanent failure, so the caller must be allowed to retry with backoff.
-      throw new AppError("PAYMENT_NOT_VERIFIED", "Transaction not found.", { retryable: true });
+    /*
+     * A freshly settled digest is not indexed yet. That is eventual consistency, not a
+     * failure, so wait for it instead of surfacing an error: the payment has already
+     * moved on chain, and telling the user "Transaction not found." would be wrong and
+     * would leave them with no way to publish the listing they paid for.
+     */
+    const deadline = Date.now() + TATUM_INDEXING_WAIT_MS;
+    let transaction = (await this.readTransactionPage(digest, null)).result.transaction;
+    while (transaction === null || transaction === undefined) {
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) {
+        getLogger().warn(
+          { digest, waitedMs: TATUM_INDEXING_WAIT_MS },
+          "transaction is still not indexed by Tatum after waiting",
+        );
+        throw new AppError("PAYMENT_NOT_VERIFIED", "Transaction not found.", { retryable: true });
+      }
+      await sleep(Math.min(INDEXING_POLL_INTERVAL_MS, remaining));
+      transaction = (await this.readTransactionPage(digest, null)).result.transaction;
     }
 
     const effects = transaction.effects;
@@ -375,11 +392,7 @@ export class TatumSuiClient {
     let pages = 1;
 
     while (pageInfo?.hasNextPage === true && pages < MAX_BALANCE_CHANGE_PAGES) {
-      const next = await this.execute(
-        TRANSACTION_QUERY,
-        { digest, after: pageInfo.endCursor ?? null },
-        suiTransactionResponseSchema,
-      );
+      const next = await this.readTransactionPage(digest, pageInfo.endCursor ?? null);
       const nextEffects = next.result.transaction?.effects;
       if (!nextEffects) break;
       changes.push(...nextEffects.balanceChanges.nodes);
@@ -396,6 +409,14 @@ export class TatumSuiClient {
         data: toJsonValue(transaction),
       },
     };
+  }
+
+  /** One page of a transaction read. `transaction` is absent until Tatum indexes it. */
+  private async readTransactionPage(
+    digest: string,
+    after: string | null,
+  ): Promise<RpcResult<SuiTransactionResponse>> {
+    return this.execute(TRANSACTION_QUERY, { digest, after }, suiTransactionResponseSchema);
   }
 
   async getBalance(owner: string, coinType: string): Promise<RpcResult<SuiBalance>> {

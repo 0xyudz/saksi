@@ -5,9 +5,14 @@ import { verifyPayment } from "@/integrations/tatum/verify-payment";
 import { GASLESS_MIN_ATOMIC } from "@/lib/config";
 import { getEnv, listingFeeAtomic } from "@/lib/env";
 import { AppError } from "@/lib/errors";
-import { getLogger, errorForLog } from "@/lib/logger";
+import { getLogger } from "@/lib/logger";
 import type { JsonObject } from "@/lib/domain";
-import { insertListing, listingFeeUsed, sellerHasExternalRef } from "@/server/data/listings";
+import {
+  findListingByFeeDigest,
+  insertListing,
+  listingFeeUsed,
+  sellerHasExternalRef,
+} from "@/server/data/listings";
 import type { SellerIdentity } from "@/server/auth";
 
 /**
@@ -50,10 +55,29 @@ export const publishSignalSchema = z.object({
 
 export type PublishSignalInput = z.infer<typeof publishSignalSchema>;
 
+/** The same listing, identified by a fee that has already been settled. */
+export const recoverListingSchema = publishSignalSchema;
+
+export type RecoverListingInput = z.infer<typeof recoverListingSchema>;
+
 export interface PublishedSignal {
   readonly signal: SignalRow;
   readonly listingFeeAtomic: bigint;
   readonly explorerUrl: string;
+}
+
+export interface RecoveredListing extends PublishedSignal {
+  readonly listingFeeDigest: string;
+  /** True when this call created the row; false when it already existed. */
+  readonly recovered: boolean;
+}
+
+/** The explorer link for a settlement, built from the network in use. */
+function explorerUrlFor(digest: string): string {
+  const network = getEnv().SUI_NETWORK;
+  return network === "sui:mainnet"
+    ? `https://suivision.xyz/txblock/${encodeURIComponent(digest)}`
+    : `https://testnet.suivision.xyz/txblock/${encodeURIComponent(digest)}`;
 }
 
 /**
@@ -109,10 +133,10 @@ export async function publishSignal(
     {
       signalId: created.id,
       sellerId: seller.userId,
+      listingFeeDigest: input.digest,
       listingFeeAtomic: verified.payment.amountAtomic.toString(),
-      digest: verified.payment.digest,
     },
-    "signal published after listing fee settled",
+    "signal published",
   );
 
   return {
@@ -122,13 +146,90 @@ export async function publishSignal(
   };
 }
 
-/** Exposed for the UI so the listing form can show the real fee before signing. */
-export function currentListingFeeAtomic(): bigint {
-  return listingFeeAtomic();
-}
+/**
+ * Publishes the listing a settled fee was paid for, without taking a second payment.
+ *
+ * The settlement is proven from chain here as well, so a caller cannot claim an unrelated
+ * or smaller transaction. Recovery is idempotent: a digest that already published a
+ * listing returns that listing instead of failing, which is what makes it safe for the
+ * browser to call after an error it could not interpret.
+ */
+export async function recoverListing(
+  seller: SellerIdentity,
+  input: RecoverListingInput,
+): Promise<RecoveredListing> {
+  const env = getEnv();
+  const listingFee = listingFeeAtomic(env);
 
-/** Logs and rethrows, so the route keeps one error path. */
-export function describePublishFailure(error: unknown): never {
-  getLogger().error({ error: errorForLog(error) }, "signal publishing failed");
-  throw error;
+  const existing = await findListingByFeeDigest(input.digest);
+  if (existing) {
+    if (existing.sellerId !== seller.userId) {
+      throw new AppError("CONFLICT", "That listing fee belongs to another journal.");
+    }
+    return {
+      signal: existing,
+      listingFeeDigest: input.digest,
+      listingFeeAtomic: existing.listingFeeAtomic ?? 0n,
+      explorerUrl: explorerUrlFor(input.digest),
+      recovered: true,
+    };
+  }
+
+  if (await sellerHasExternalRef(seller.userId, seller.handle, input.externalRef)) {
+    throw new AppError("CONFLICT", "You already listed a signal with that reference.");
+  }
+
+  // Proven from chain, not trusted from the request: the amount, the recipient and the
+  // coin are all re-checked before the row is written.
+  const verified = await verifyPayment({
+    digest: input.digest,
+    payTo: env.X402_PAY_TO_ADDRESS,
+    minAmountAtomic: listingFee,
+    network: env.SUI_NETWORK,
+  });
+
+  const created = await insertListing({
+    sellerId: seller.userId,
+    payToAddress: seller.walletAddress,
+    externalRef: input.externalRef,
+    provider: seller.handle,
+    title: input.title,
+    payload: input.payload as JsonObject,
+    priceAtomic: input.priceAtomic,
+    asset: env.SUI_USDC_COIN_TYPE,
+    listingFeeDigest: input.digest,
+    listingFeeAtomic: verified.payment.amountAtomic,
+  });
+
+  if (!created) {
+    const raced = await findListingByFeeDigest(input.digest);
+    if (raced && raced.sellerId === seller.userId) {
+      return {
+        signal: raced,
+        listingFeeDigest: input.digest,
+        listingFeeAtomic: raced.listingFeeAtomic ?? 0n,
+        explorerUrl: verified.payment.explorerUrl,
+        recovered: true,
+      };
+    }
+    throw new AppError("CONFLICT", "That listing was already published.");
+  }
+
+  getLogger().info(
+    {
+      signalId: created.id,
+      sellerId: seller.userId,
+      listingFeeDigest: input.digest,
+      listingFeeAtomic: verified.payment.amountAtomic.toString(),
+    },
+    "signal published from an existing settlement",
+  );
+
+  return {
+    signal: created,
+    listingFeeDigest: input.digest,
+    listingFeeAtomic: verified.payment.amountAtomic,
+    explorerUrl: verified.payment.explorerUrl,
+    recovered: false,
+  };
 }

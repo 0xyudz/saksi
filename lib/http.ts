@@ -63,6 +63,7 @@ export async function handleRoute<TRequest extends Request>(
     );
     return jsonResponse(publicError(appError, requestId), requestId, {
       status: appError.httpStatus,
+      ...(appError.headers === undefined ? {} : { headers: new Headers(appError.headers) }),
     });
   }
 }

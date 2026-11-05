@@ -85,6 +85,11 @@ export type PublishedSignalResult = z.infer<typeof publishedSignalSchema>;
  * `balance::send_funds` and rejects every coin-splitting command, so a fee cannot be
  * carved out of the buyer's payment. Charging the seller separately keeps both payments
  * honest and keeps Saksi out of custody.
+ *
+ * The settlement can succeed while the listing does not: Tatum indexes a new transaction
+ * a few seconds after it lands, and any other server-side failure has the same effect.
+ * In that case the fee has already been taken, so the digest is recovered instead of
+ * asking the seller to pay again.
  */
 export async function publishSignalWithWallet(input: {
   readonly body: {
@@ -112,12 +117,64 @@ export async function publishSignalWithWallet(input: {
     body: requestBody,
   });
 
-  if (!response.ok) throw new Error(await failureMessage(response));
+  if (!response.ok) {
+    const settle = settleDigest(response);
+    if (settle !== null) {
+      const recovered = await recoverPublishedListing(settle, input.body);
+      if (recovered !== null) return recovered;
+    }
+    throw new Error(await failureMessage(response));
+  }
 
   const body: unknown = await response.json().catch(() => null);
   const parsed = publishedSignalSchema.safeParse(body);
   if (!parsed.success) throw new Error("The listing endpoint returned an unexpected body.");
   return parsed.data;
+}
+
+/** The settlement digest of a failed paid request, when the payment did settle. */
+function settleDigest(response: Response): string | null {
+  try {
+    const settle = new x402HTTPClient(new x402Client()).getPaymentSettleResponse((name) =>
+      response.headers.get(name),
+    );
+    if (settle.success && settle.transaction) return settle.transaction;
+  } catch {
+    // No settle header. Fall through: the server also reports the digest it settled, so a
+    // failure after payment is still recoverable.
+  }
+  return response.headers.get("x-saksi-digest");
+}
+
+/**
+ * Asks the server to finish a listing whose fee already settled.
+ *
+ * Returns null when the fee is genuinely unknown or already spent on another listing, so
+ * the caller can surface the original failure rather than a recovery error.
+ */
+async function recoverPublishedListing(
+  digest: string,
+  body: {
+    readonly title: string;
+    readonly externalRef: string;
+    readonly priceAtomic: string;
+    readonly payload: Record<string, unknown>;
+  },
+): Promise<PublishedSignalResult | null> {
+  try {
+    const response = await fetch(new URL("/api/signals/recover", window.location.origin), {
+      method: "POST",
+      headers: { accept: "application/json", "content-type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ ...body, digest }),
+    });
+    if (!response.ok) return null;
+
+    const parsed = publishedSignalSchema.safeParse(await response.json().catch(() => null));
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
 }
 
 async function failureMessage(response: Response): Promise<string> {

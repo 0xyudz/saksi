@@ -183,6 +183,16 @@ export async function listingFeeUsed(digest: string): Promise<boolean> {
   return rows.length > 0;
 }
 
+/** The listing a settlement digest published, if any. Used to recover a paid digest. */
+export async function findListingByFeeDigest(digest: string): Promise<SignalRow | null> {
+  const rows = await getDb()
+    .select()
+    .from(signals)
+    .where(eq(signals.listingFeeDigest, digest))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
 /** A seller cannot list the same external reference twice. */
 export async function sellerHasExternalRef(
   sellerId: string,

@@ -37,6 +37,12 @@ export interface AppErrorOptions {
   readonly httpStatus?: number;
   /** Marks a failure that a caller may safely retry (transport/5xx only). */
   readonly retryable?: boolean;
+  /**
+   * Headers the error response must still carry. Used when a payment already settled and
+   * the failure happened afterwards: the client needs the settlement receipt to recover
+   * rather than pay a second time.
+   */
+  readonly headers?: Readonly<Record<string, string>>;
 }
 
 export class AppError extends Error {
@@ -44,6 +50,7 @@ export class AppError extends Error {
   readonly httpStatus: number;
   readonly details?: AppErrorDetails;
   readonly retryable: boolean;
+  readonly headers?: Readonly<Record<string, string>>;
 
   constructor(code: AppErrorCode, message: string, options: AppErrorOptions = {}) {
     super(message, options.cause === undefined ? undefined : { cause: options.cause });
@@ -52,6 +59,7 @@ export class AppError extends Error {
     this.httpStatus = options.httpStatus ?? HTTP_STATUS[code];
     this.details = options.details;
     this.retryable = options.retryable ?? false;
+    this.headers = options.headers;
   }
 }
 
