@@ -23,21 +23,29 @@ export default async function ResumePage() {
           remembers you.
         </h1>
         <p className="text-muted mt-6 max-w-lg text-[15px] leading-relaxed">
-          {APP_NAME} has no passwords and no email. Sign back in with the wallet bound to your
-          journal, or fall back to the recovery code you saved when you claimed your handle.
+          {APP_NAME} has no passwords and no email. Sign back in with the wallet that is your
+          journal, or fall back to the recovery code you saved when you created it.
         </p>
         <ul className="text-muted mt-8 space-y-3 text-sm">
           <li className="flex gap-3">
             <span className="mono text-amber">01</span>
-            <span>One wallet maps to exactly one handle, enforced by a unique index.</span>
+            <span>
+              Your wallet address is the journal, so two journals cannot share one address.
+            </span>
           </li>
           <li className="flex gap-3">
             <span className="mono text-amber">02</span>
-            <span>The recovery code is stored only as a scrypt hash; nobody can read it back.</span>
+            <span>
+              The recovery code names a namespace by its SHA-256 digest; the code itself is never
+              stored.
+            </span>
           </li>
           <li className="flex gap-3">
             <span className="mono text-amber">03</span>
-            <span>Journals created before recovery existed cannot be resumed.</span>
+            <span>
+              Your handle is a display name, not a login: it may be shared and is not asked for
+              here.
+            </span>
           </li>
         </ul>
       </div>

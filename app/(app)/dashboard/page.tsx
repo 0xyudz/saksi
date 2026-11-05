@@ -222,96 +222,83 @@ export default async function DashboardPage() {
               </Link>
             </div>
 
-            {user.walletAddress === null ? (
+            <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div>
+                <p className="text-muted text-[11px]">Listings</p>
+                <p className="stat-value mt-1">{seller.listings}</p>
+              </div>
+              <div>
+                <p className="text-muted text-[11px]">Purchases</p>
+                <p className="stat-value mt-1">{seller.purchases}</p>
+              </div>
+              <div>
+                <p className="text-muted text-[11px]">Earned (settled to you)</p>
+                <p className="stat-value text-green mt-1">{formatUsd(seller.earnedAtomic)}</p>
+              </div>
+              <div>
+                <p className="text-muted text-[11px]">Listing fees paid</p>
+                <p className="stat-value mt-1">{formatUsd(seller.listingFeesAtomic)}</p>
+              </div>
+            </div>
+
+            <p className="text-muted border-line mt-4 border-t pt-4 text-[11px] leading-relaxed">
+              Earned means the amount already verified on chain and paid straight to{" "}
+              <span className="mono text-paper">
+                {user.walletAddress.slice(0, 8)}…{user.walletAddress.slice(-4)}
+              </span>
+              . Saksi never holds it, so there is no balance to withdraw and nothing here is an
+              estimate.
+            </p>
+
+            <div className="border-line mt-4 flex flex-wrap items-center gap-x-6 gap-y-2 border-t pt-4 text-[11px]">
+              <span className="text-muted">
+                Your resolved record:{" "}
+                <span className="mono text-paper">{verification.resolved}</span> outcomes
+              </span>
+              <span className="mono text-green text-[10px] tracking-[0.12em] uppercase">
+                {verification.verified} oracle verified
+              </span>
+              <span className="mono text-red text-[10px] tracking-[0.12em] uppercase">
+                {verification.contradicted} contradicted
+              </span>
+              <span className="mono text-muted text-[10px] tracking-[0.12em] uppercase">
+                {verification.selfAttested} self-attested
+              </span>
+            </div>
+
+            {listings.length === 0 ? (
               <p className="text-muted mt-4 text-xs leading-relaxed">
-                This journal has no proven wallet, so it cannot list signals — there would be
-                nowhere to send a buyer&apos;s payment.{" "}
-                <Link href="/settings/wallet" className="link-underline text-amber">
-                  Bind a wallet
-                </Link>{" "}
-                first; it needs one signature and moves no funds.
+                No listing yet. Publishing costs a flat listing fee settled through x402 before the
+                signal becomes visible, and your sale price goes to your wallet.
               </p>
             ) : (
-              <>
-                <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  <div>
-                    <p className="text-muted text-[11px]">Listings</p>
-                    <p className="stat-value mt-1">{seller.listings}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted text-[11px]">Purchases</p>
-                    <p className="stat-value mt-1">{seller.purchases}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted text-[11px]">Earned (settled to you)</p>
-                    <p className="stat-value text-green mt-1">{formatUsd(seller.earnedAtomic)}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted text-[11px]">Listing fees paid</p>
-                    <p className="stat-value mt-1">{formatUsd(seller.listingFeesAtomic)}</p>
-                  </div>
-                </div>
-
-                <p className="text-muted border-line mt-4 border-t pt-4 text-[11px] leading-relaxed">
-                  Earned means the amount already verified on chain and paid straight to{" "}
-                  <span className="mono text-paper">
-                    {user.walletAddress.slice(0, 8)}…{user.walletAddress.slice(-4)}
-                  </span>
-                  . Saksi never holds it, so there is no balance to withdraw and nothing here is an
-                  estimate.
-                </p>
-
-                <div className="border-line mt-4 flex flex-wrap items-center gap-x-6 gap-y-2 border-t pt-4 text-[11px]">
-                  <span className="text-muted">
-                    Your resolved record:{" "}
-                    <span className="mono text-paper">{verification.resolved}</span> outcomes
-                  </span>
-                  <span className="mono text-green text-[10px] tracking-[0.12em] uppercase">
-                    {verification.verified} oracle verified
-                  </span>
-                  <span className="mono text-red text-[10px] tracking-[0.12em] uppercase">
-                    {verification.contradicted} contradicted
-                  </span>
-                  <span className="mono text-muted text-[10px] tracking-[0.12em] uppercase">
-                    {verification.selfAttested} self-attested
-                  </span>
-                </div>
-
-                {listings.length === 0 ? (
-                  <p className="text-muted mt-4 text-xs leading-relaxed">
-                    No listing yet. Publishing costs a flat listing fee settled through x402 before
-                    the signal becomes visible, and your sale price goes to your wallet.
-                  </p>
-                ) : (
-                  <div className="divide-line mt-4 divide-y">
-                    {listings.slice(0, 5).map((listing) => (
-                      <div
-                        key={listing.signal.id}
-                        className="flex flex-wrap items-center justify-between gap-3 py-3"
+              <div className="divide-line mt-4 divide-y">
+                {listings.slice(0, 5).map((listing) => (
+                  <div
+                    key={listing.signal.id}
+                    className="flex flex-wrap items-center justify-between gap-3 py-3"
+                  >
+                    <div className="min-w-0">
+                      <Link
+                        href={`/signals/${listing.signal.id}`}
+                        className="link-underline text-paper text-sm"
                       >
-                        <div className="min-w-0">
-                          <Link
-                            href={`/signals/${listing.signal.id}`}
-                            className="link-underline text-paper text-sm"
-                          >
-                            {listing.signal.title}
-                          </Link>
-                          <p className="mono text-muted mt-1 text-[10px]">
-                            price ${formatAtomic(listing.signal.priceAtomic)} · {listing.purchases}{" "}
-                            sold · fee{" "}
-                            {listing.signal.listingFeeAtomic === null
-                              ? "not captured"
-                              : formatUsd(listing.signal.listingFeeAtomic)}
-                          </p>
-                        </div>
-                        <p className="mono text-green shrink-0 text-sm">
-                          {formatUsd(listing.earnedAtomic)}
-                        </p>
-                      </div>
-                    ))}
+                        {listing.signal.title}
+                      </Link>
+                      <p className="mono text-muted mt-1 text-[10px]">
+                        price ${formatAtomic(listing.signal.priceAtomic)} · {listing.purchases} sold
+                        · fee{" "}
+                        {listing.signal.listingFeeAtomic === null
+                          ? "not captured"
+                          : formatUsd(listing.signal.listingFeeAtomic)}
+                      </p>
+                    </div>
+                    <p className="mono text-green shrink-0 text-sm">
+                      {formatUsd(listing.earnedAtomic)}
+                    </p>
                   </div>
-                )}
-              </>
+                ))}
+              </div>
             )}
           </div>
         </section>

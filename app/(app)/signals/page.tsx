@@ -5,7 +5,6 @@ import { EmptyState, PageHeader } from "@/components/ui";
 import { formatDateTime } from "@/lib/format";
 import { formatAtomic } from "@/lib/price";
 import { getSessionUser } from "@/lib/session";
-import { canSell } from "@/server/auth";
 import { listListedSignals } from "@/server/data/listings";
 
 export const dynamic = "force-dynamic";
@@ -13,7 +12,6 @@ export const metadata = { title: "Signals" };
 
 export default async function SignalsPage() {
   const [items, user] = await Promise.all([listListedSignals(), getSessionUser()]);
-  const maySell = user !== null && canSell(user.walletAddress);
 
   return (
     <div>
@@ -88,27 +86,18 @@ export default async function SignalsPage() {
                 and prove a wallet to publish signals. Buyers pay your wallet directly, so Saksi
                 never holds your money.
               </p>
-            ) : maySell ? (
+            ) : (
               <>
                 <p className="text-muted mt-2 mb-4 text-xs leading-relaxed">
                   The listing fee is settled through x402 before the listing becomes visible. Your
                   sale price is paid straight to{" "}
                   <span className="mono text-paper">
-                    {user.walletAddress?.slice(0, 8)}…{user.walletAddress?.slice(-4)}
+                    {user.walletAddress.slice(0, 8)}…{user.walletAddress.slice(-4)}
                   </span>
                   .
                 </p>
                 <PublishSignalPanel handle={user.handle} />
               </>
-            ) : (
-              <p className="text-muted mt-2 text-xs leading-relaxed">
-                This journal has no wallet bound yet, so there is nowhere to send a buyer&apos;s
-                payment.{" "}
-                <Link href="/settings/wallet" className="link-underline text-amber">
-                  Bind a wallet
-                </Link>{" "}
-                first — it needs one signature and costs nothing.
-              </p>
             )}
           </section>
 

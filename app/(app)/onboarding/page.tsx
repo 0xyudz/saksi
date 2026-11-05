@@ -45,9 +45,9 @@ export default async function OnboardingPage() {
         <p className="mono text-muted text-[10px] tracking-[0.18em] uppercase">New journal</p>
         <h2 className="display mt-3 text-3xl">Claim a handle</h2>
         <p className="text-muted mt-2 mb-6 text-xs leading-relaxed">
-          No email, no password. One wallet claims one handle, and that proven address is where
-          buyers pay you if you publish signals. A one-time recovery code is your fallback if the
-          wallet is lost.
+          No email, no password. Your wallet is the journal, and that proven address is where buyers
+          pay you if you publish signals. The handle is only a display name, so another journal may
+          use the same one. A one-time recovery code is your fallback if the wallet is lost.
         </p>
         <OnboardingForm />
       </div>

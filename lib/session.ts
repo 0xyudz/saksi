@@ -44,8 +44,11 @@ export interface SessionUser {
    * so the UI must warn about that instead of pointing at a code that does not exist.
    */
   readonly hasRecovery: boolean;
-  /** The proven wallet. Always present for a journal that could sign in. */
-  readonly walletAddress: string | null;
+  /**
+   * The proven wallet. Never null: a session only exists because a wallet signed for it, so
+   * there is no such thing as a signed-in journal without an address.
+   */
+  readonly walletAddress: string;
 }
 
 export async function readSessionUserId(): Promise<string | undefined> {

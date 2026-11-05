@@ -47,8 +47,3 @@ export async function requireSellerUserId(): Promise<SellerIdentity> {
 
   return { userId: ref, handle: ref, walletAddress: ref };
 }
-
-/** Server-rendered pages need the same rule without throwing. */
-export function canSell(walletAddress: string | null): boolean {
-  return walletAddress !== null;
-}
