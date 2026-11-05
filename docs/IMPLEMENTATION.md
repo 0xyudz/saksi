@@ -557,16 +557,16 @@ pages through `listMemories()` with a **50-page safety cap** and returns three s
 The UI therefore says "at least N" when truncated, instead of claiming a namespace total it
 cannot know.
 
-### 6.8 The audit table
+### 6.8 No audit table
 
-`memory_writes` records `kind`, `blobId`, `jobId`, `namespace` for every successful write. It
-is an operator audit trail, never a substitute for the relayer. If the audit insert fails
-after a successful write, the error is logged and the write still counts — the memory is the
-source of truth, the row is bookkeeping.
+There is deliberately no `memory_writes` table. It used to record `kind`, `blobId`, `jobId`
+and `namespace` for every write, which made Walrus look like a cache of Postgres and
+duplicated a blob id the relayer already returns. `remember()` now returns the blob id as
+the receipt and writes nothing locally, so the memory is the only record of itself.
 
-Because Walrus blobs cannot be deleted, `memory_writes` outlives deleted journals. That is why
-the README reports 38 rows against 4 surviving journals, and explains it rather than hiding
-it.
+`pnpm verify:reconstruct` proves this is safe rather than merely tidy: it rebuilds every
+journal's credibility and bias numbers from the relayer alone and compares them to what
+Postgres computes. See §11.1.
 
 ---
 
@@ -886,7 +886,7 @@ optimisation, it is a decision about the whole app.
 
 ## 11. Data model
 
-Eight tables, three migrations (`0000`, `0001`, `0002`).
+Eight tables, six migrations (`0000`–`0006`).
 
 ```txt
 users ──┬── picks ── outcomes
@@ -894,20 +894,20 @@ users ──┬── picks ── outcomes
         │      └── payments ── signals
         └── payments
 
-memory_writes       (operator audit, no foreign keys)
+wallet_challenges   (single-use nonces)
 recommendations     (pick_id nullable, cited_memory_ids jsonb)
 ```
 
-| Table             | Purpose                      | Key constraints                                                                         |
-| ----------------- | ---------------------------- | --------------------------------------------------------------------------------------- |
-| `users`           | a journal identity           | `handle` unique; `recovery_hash` nullable (legacy journals)                             |
-| `analysts`        | who is being tracked         | `(name, kind)` unique; **global**, not owned by a user                                  |
-| `picks`           | a sealed commitment          | FKs: `user_id` cascade, `analyst_id` restrict; indexes on user, analyst, status         |
-| `outcomes`        | the resolution               | `pick_id` unique, cascade delete                                                        |
-| `signals`         | a purchasable signal listing | `(provider, external_ref)` unique; `listing_fee_digest` unique so one fee = one listing |
-| `payments`        | a verified settlement        | `digest` unique; `user_id` and `pick_id` `set null` on delete; index on payer           |
-| `memory_writes`   | audit of every Walrus write  | index on `kind`                                                                         |
-| `recommendations` | a persisted verdict          | index on `created_at`; `pick_id` `set null` on delete                                   |
+| Table               | Purpose                      | Key constraints                                                                         |
+| ------------------- | ---------------------------- | --------------------------------------------------------------------------------------- |
+| `users`             | a journal identity           | `handle` unique; `recovery_hash` nullable (legacy journals)                             |
+| `analysts`          | who is being tracked         | `(name, kind)` unique; **global**, not owned by a user                                  |
+| `picks`             | a sealed commitment          | FKs: `user_id` cascade, `analyst_id` restrict; indexes on user, analyst, status         |
+| `outcomes`          | the resolution               | `pick_id` unique, cascade delete                                                        |
+| `signals`           | a purchasable signal listing | `(provider, external_ref)` unique; `listing_fee_digest` unique so one fee = one listing |
+| `payments`          | a verified settlement        | `digest` unique; `user_id` and `pick_id` `set null` on delete; index on payer           |
+| `wallet_challenges` | a single-use nonce           | `nonce` unique; consumed once, so a signature cannot be replayed                        |
+| `recommendations`   | a persisted verdict          | index on `created_at`; `pick_id` `set null` on delete                                   |
 
 Two design notes:
 
@@ -917,6 +917,35 @@ Two design notes:
   silently delete another journal's history.
 - **`payments.user_id` is nullable on purpose.** The agent purchase path records a settlement
   before any journal claims it; that row can be claimed later by digest.
+
+### 11.1 Rebuilding from Walrus, and what it costs
+
+`server/scoring/reconstruct.ts` joins a `pick_commit` memory to its `outcome` memory on the
+pick id inside the text, then feeds the result to the same `credibilityBreakdown()` and
+`detectBias()` the SQL path uses. Nothing in it reads Postgres.
+
+Measured on the production relayer, 16 namespaces holding 44 memories:
+
+| Operation                          | Time           |
+| ---------------------------------- | -------------- |
+| `listNamespaces()`                 | ~2.4 s         |
+| one `recall()` per namespace       | 0.9–4.8 s each |
+| sequential walk of every namespace | 25.8 s         |
+| parallel walk, 8 at a time         | 4.7 s          |
+
+Two consequences, both deliberate:
+
+1. **Per-journal reconstruction is cheap; global reconstruction is not.** `/journals/<ns>`
+   reads a single namespace (~1.3 s) and is safe to serve. Rebuilding every analyst's
+   credibility across all journals needs the whole walk, so `leaderboard()` still reads
+   Postgres. Serving a 4.7 s relayer walk on every page view would be worse for users than
+   the thing it demonstrates.
+2. **`recall()` is capped at 100 results.** A namespace past that limit would reconstruct
+   from a prefix of its history. `ReconstructedJournal.possiblyTruncated` reports when the
+   cap was hit so the UI can say so instead of implying completeness.
+
+`pnpm verify:reconstruct` compares the two paths per analyst and reports `mismatches`. It is
+the evidence for the claim in §6.8, and it exits non-zero when they disagree.
 
 ---
 
