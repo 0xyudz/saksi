@@ -306,6 +306,27 @@ Two changes fix it, and the asymmetry between them is the interesting part:
   (`oldestJournalRecord()` in `lib/journal-identity.ts`, unit tested), so a wallet that already
   has duplicates keeps one stable ref instead of flipping between namespaces per request.
 
+**Measured, including where it is weak.** Claiming the same wallet twice against the live
+deployment gives `201` then `409`, but only if the second attempt comes after the relayer has
+indexed the first write. Two claims issued back to back both returned `201`: the guard's read
+could not yet see the record the previous claim had written, so the check-then-write lost.
+
+That is worth stating plainly rather than calling the guard airtight. What it does **not**
+break is the property that matters. Inspecting the wallet afterwards showed two identity
+records, both with the _same_ ref:
+
+```
+ref=0xd236e06d…  handle=probe_claim_guard  18:44:49
+ref=0xd236e06d…  handle=probe_claim_guard  18:44:09
+distinct refs: 1 (SAME namespace, no split)
+```
+
+The ref comes from the wallet, so a duplicate cannot point somewhere else. The failure mode of
+a lost race is a redundant record, not a split journal — which is exactly the asymmetry claimed
+above, now confirmed against the live relayer instead of argued from the code. The guard's real
+job is to reject the ordinary case (a returning user who claims again, minutes or days later),
+and that case it handles.
+
 The lesson is worth keeping: "the key is unique" and "the store enforces uniqueness" are
 different claims, and only the second one survives a retry.
 

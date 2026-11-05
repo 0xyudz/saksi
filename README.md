@@ -479,6 +479,7 @@ re-running `verify:memory` proves the same path with fresh values.
 | Wallet signature rejected           | malformed 64-byte signature → `401`, not `500` (regression fixed)                                 | `tests/wallet-signature.test.ts` |
 | Legacy journal refused for selling  | uuid-ref session → `403`, asking for a wallet-claimed journal                                     | `requireSellerUserId()`          |
 | Listing fee challenge               | `402`, `amount=20000` atomic ($0.02), `payTo` = platform, `sui:mainnet`                           | probe against live server        |
+| Duplicate claim refused             | same wallet claimed twice 45s apart: `201` then `409 CONFLICT` on the live deployment             | probe against live server        |
 | Public journal read                 | `/journals` 200 with 14 namespaces; `/journals/<uuid>` 200; `other:123` → 404                     | live deployment                  |
 | Dashboard screenshot                | not captured                                                                                      | —                                |
 
@@ -568,6 +569,11 @@ only record, which is exactly what `listNamespaces()` reads.
   uniqueness lacked — the wallet _is_ the key, so two racing writers hold the same private
   key. The lookup is also deterministic (oldest record wins) so a wallet that already has
   duplicates keeps one stable ref.
+- That guard reads before it writes, and the Walrus relayer is eventually consistent. Two
+  claims issued back to back both succeed, because the second read cannot yet see the first
+  write. Measured on the live deployment: the duplicate records share the _same_ ref, so the
+  journal does not split - the ref is derived from the wallet, not from user input. The guard
+  rejects the ordinary case (claiming again later), which is what it is for.
 - Publishing is open to any journal with a proven wallet and is rate limited to 10 requests
   per minute. Buying a listed signal is open to anyone with a wallet.
 - The in-memory rate limiter is not shared between server instances.

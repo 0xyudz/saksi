@@ -62,9 +62,12 @@ export async function PUT(request: Request): Promise<Response> {
 /**
  * Creates a journal from a proven wallet.
  *
- * Nothing is registered, so there is no conflict to report: the wallet is the key and the
- * handle is a display name. The recovery code is returned exactly once and is the only
- * fallback if the wallet is later lost.
+ * A wallet that already has a journal is refused with `409`: a second claim would write a
+ * second identity record with a different ref, and the ref decides the namespace, so the
+ * journal's history would split in two. The handle is still a display name with no
+ * uniqueness — only the wallet is checked.
+ *
+ * The recovery code is returned exactly once and is the only fallback if the wallet is lost.
  */
 export async function POST(request: Request): Promise<Response> {
   return handleRoute(request, async ({ requestId }) => {
