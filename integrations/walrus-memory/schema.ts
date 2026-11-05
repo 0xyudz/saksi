@@ -50,6 +50,20 @@ const caip2 = z.string().regex(/^[a-z0-9-]+:[a-zA-Z0-9-]+$/, "expected a CAIP-2 
 
 const base64ish = z.string().min(1).max(200);
 
+/**
+ * A journal reference: a lowercase Sui address, or a uuid for journals created before
+ * migration `0007`.
+ *
+ * The preference record used to require a uuid, which silently made the form unusable for
+ * every wallet-based journal: the builder produced text the parser then rejected, so the
+ * write failed with a 500. A ref is opaque, so both forms have to be accepted here.
+ */
+const journalRefSchema = z
+  .string()
+  .regex(/^(0x[a-f0-9]{64}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/, {
+    message: "expected a Sui address or a uuid",
+  });
+
 const pickSchema = z.strictObject({
   id: z.string().uuid(),
   analyst: z.string().uuid(),
@@ -98,7 +112,7 @@ const sourceRoiSchema = z.strictObject({
 });
 
 const preferenceSchema = z.strictObject({
-  userId: z.string().uuid(),
+  userId: journalRefSchema,
   statement: z.string().min(1).max(400),
 });
 

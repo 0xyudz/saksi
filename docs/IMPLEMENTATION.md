@@ -535,7 +535,7 @@ Eight kinds, each validated by a `z.strictObject` (unknown keys are rejected):
 | `outcome`     | pickId, result, brier?, source, resolvedAt       | resolving a pick                  |
 | `bias`        | analyst, pattern, evidence, confidence           | resolution, when a pattern exists |
 | `source_roi`  | provider, spendAtomic, correct, wrong, note?     | purchase and resolution           |
-| `preference`  | userId, statement                                | user teaches the journal          |
+| `preference`  | userId (a journal ref), statement                | user teaches the journal          |
 | `payment`     | digest, provider, amountAtomic, network          | a verified purchase               |
 | `pick`        | legacy, read-only                                | never (kept for old fixtures)     |
 
@@ -552,6 +552,17 @@ containing `|` could forge a second field.
 Every builder runs `assemble()`, which **re-parses its own output** before returning. A
 malformed record cannot reach the relayer, because a bug in a builder fails locally instead of
 writing garbage to a store that cannot be deleted from.
+
+That guard caught a real regression, and it is worth recording because the guard is what
+turned a silent corruption into a loud failure. When identity moved to the wallet, the
+`preference` schema still required `userId` to be a uuid. A wallet journal therefore built a
+record that its own parser rejected, `assemble()` threw, and `POST /api/memory/preferences`
+returned `500` for **every** journal created after migration `0007`. No test caught it: the
+fixture was a uuid, so the wallet path was never exercised. The schema now accepts either a
+normalised Sui address or a uuid, and three tests cover both forms plus the rejection case.
+
+The lesson is narrower than "write more tests": a ref is opaque, and any validator that
+narrows it to one representation becomes wrong the moment a second representation is legal.
 
 ### 6.5 Write policy: which failures are fatal
 

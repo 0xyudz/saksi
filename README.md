@@ -16,7 +16,7 @@ Built for **Total Recall — Tatum × Walrus Memory** (Track 1: Markets & Sports
 | ------------------------------------- | ---------------------------------------------------------------------------- |
 | `pnpm typecheck`                      | passes                                                                       |
 | `pnpm lint`                           | passes                                                                       |
-| `pnpm test`                           | 160 tests pass across 19 files                                               |
+| `pnpm test`                           | 163 tests pass across 19 files                                               |
 | `pnpm build`                          | passes (Next.js 16.4.3, Turbopack)                                           |
 | Migrations applied to a live database | yes — 7 tables on a live Postgres instance (`0000`–`0007`)                   |
 | Walrus Memory (mainnet relayer)       | verified — `pnpm verify:memory` writes, recalls and lists real blobs         |
@@ -456,8 +456,8 @@ re-running `verify:memory` proves the same path with fresh values.
 | Proof                               | Value                                                                                             | Produced by                      |
 | ----------------------------------- | ------------------------------------------------------------------------------------------------- | -------------------------------- |
 | Walrus Memory relayer               | `status: ok`, relayer `0.1.0`                                                                     | `pnpm verify:memory`             |
-| Walrus Memory blob ID (fresh write) | `KWpogiSiqOxBOD8x5Z72QCnh_Nnfd7aYHE-tEfjojcM`                                                     | `pnpm verify:memory`             |
-| Walrus Memory recall distance       | `0.3566046999066741` (cosine)                                                                     | `pnpm verify:memory`             |
+| Walrus Memory blob ID (fresh write) | `9omuWV3m0_gRnMKbgqFnwpY6TjI2ihZR_A2ZElXOrLY`                                                     | `pnpm verify:memory`             |
+| Walrus Memory recall distance       | `0.35216430960754486` (cosine)                                                                    | `pnpm verify:memory`             |
 | Walrus Memory blob ID (sealed pick) | `RruPtIKgN3QZyEmUNOIVqA_yrk8mBylE8Bsg4h9O0NA` (`pick_commit`)                                     | relayer read                     |
 | Walrus Memory blob ID (payment)     | `iQkdVACTG5arG58RDCnYr74_dJPeueaeJ9NTGheeBRA` (`payment`)                                         | relayer read                     |
 | Walrus Memory blob ID (source ROI)  | `KkHx_aFl4YkIBBGF3bQ4hMMljtdhshUUTVMxhEqbjcE` (`source_roi`)                                      | relayer read                     |

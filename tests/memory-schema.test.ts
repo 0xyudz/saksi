@@ -173,4 +173,38 @@ describe("memory format v1", () => {
     if (parsed?.kind !== "pick") throw new Error("expected a legacy pick");
     expect(parsed.selection).toBe("Legacy selection");
   });
+
+  /*
+   * Regression: `preferenceSchema.userId` used to require a uuid, so a wallet-based journal
+   * built a record its own parser then rejected. The write failed with a 500 for every
+   * journal created after migration 0007, and no test caught it because the fixture was a
+   * uuid. Both ref forms must round-trip.
+   */
+  it("round-trips a preference for a wallet-based journal", () => {
+    const wallet = `0x${"ab".repeat(32)}`;
+    const built = buildPreferenceMemory({ userId: wallet, statement: "Avoid underdog parlays" });
+
+    const parsed = parseMemory(built.text);
+    expect(parsed?.kind).toBe("preference");
+    if (parsed?.kind !== "preference") throw new Error("expected a preference");
+    expect(parsed.userId).toBe(wallet);
+    expect(parsed.statement).toBe("Avoid underdog parlays");
+  });
+
+  it("round-trips a preference for a legacy uuid journal", () => {
+    const built = buildPreferenceMemory({ userId: USER_ID, statement: "Prefer home wins" });
+
+    const parsed = parseMemory(built.text);
+    expect(parsed?.kind).toBe("preference");
+    if (parsed?.kind !== "preference") throw new Error("expected a preference");
+    expect(parsed.userId).toBe(USER_ID);
+  });
+
+  it("rejects a preference whose ref is neither an address nor a uuid", () => {
+    // `assemble()` validates every record it builds, so a bad ref fails at build time
+    // rather than producing text that only fails later on read.
+    expect(() => buildPreferenceMemory({ userId: "not-a-ref", statement: "Anything" })).toThrow(
+      /rejected a freshly built preference record/,
+    );
+  });
 });
