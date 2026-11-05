@@ -532,6 +532,11 @@ run writes one more `preference` memory, so that count grows by one per run.
 
 ## Known limitations and risks
 
+- One catalogue listing (`426fb368-…`, "matchweek 12") is priced at `$0.01`, below the `$0.02`
+  listing fee, and it was published before `publishSignal()` refused that. It is still visible
+  and still purchasable, and a sale at that price returns less than the seller paid to list
+  it. Rows are not rewritten, so removing or repricing it is a manual decision rather than
+  something the new rule can undo.
 - Oracle verification covers **one league and one market**: English Premier League
   (`espn:eng.1`) match-winner selections written as `"<Team> to win"` or `"draw"`. Every
   other market resolves as `self_attested`, is labelled that way in the UI, and contributes
