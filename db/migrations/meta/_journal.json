@@ -43,6 +43,13 @@
       "when": 1793722174740,
       "tag": "0005_challenge_message",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793889983350,
+      "tag": "0006_rapid_nemesis",
+      "breakpoints": true
     }
   ]
 }

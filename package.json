@@ -23,6 +23,7 @@
     "verify:tatum": "tsx scripts/verify-tatum.ts",
     "verify:x402": "tsx scripts/verify-x402.ts",
     "verify:oracle": "tsx scripts/verify-oracle.ts",
+    "verify:reconstruct": "tsx scripts/verify-reconstruct.ts",
     "recovery:issue": "tsx scripts/issue-recovery-code.ts"
   },
   "dependencies": {

@@ -1,14 +1,7 @@
 import { desc, eq } from "drizzle-orm";
 
 import { getDb } from "@/db/client";
-import {
-  memoryWrites,
-  payments,
-  recommendations,
-  signals,
-  type MemoryWriteRow,
-  type RecommendationRow,
-} from "@/db/schema";
+import { payments, recommendations, signals, type RecommendationRow } from "@/db/schema";
 
 export interface PaymentLedgerItem {
   readonly id: string;
@@ -45,19 +38,10 @@ export async function listRecentPayments(limit = 50): Promise<PaymentLedgerItem[
   return rows;
 }
 
-export async function listMemoryWriteAudit(limit = 25): Promise<MemoryWriteRow[]> {
-  return getDb().select().from(memoryWrites).orderBy(desc(memoryWrites.createdAt)).limit(limit);
-}
-
 export async function listRecentRecommendations(limit = 10): Promise<RecommendationRow[]> {
   return getDb()
     .select()
     .from(recommendations)
     .orderBy(desc(recommendations.createdAt))
     .limit(limit);
-}
-
-export async function countMemoryWrites(): Promise<number> {
-  const rows = await getDb().select({ id: memoryWrites.id }).from(memoryWrites);
-  return rows.length;
 }

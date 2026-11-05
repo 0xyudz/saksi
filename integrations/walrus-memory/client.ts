@@ -1,11 +1,8 @@
 import { MemWal } from "@mysten-incubation/memwal";
 
-import { getDb } from "@/db/client";
-import { memoryWrites } from "@/db/schema";
 import type { MemoryCitation } from "@/lib/domain";
 import { getEnv } from "@/lib/env";
 import { AppError } from "@/lib/errors";
-import { getLogger, errorForLog } from "@/lib/logger";
 import {
   buildPreferenceMemory,
   namespaceFor,
@@ -68,29 +65,15 @@ export async function health(): Promise<{ status: string; version: string }> {
 }
 
 /**
- * Writes a validated memory and records the real blob/job ids. The memory is the
- * source of truth; the database row is an audit trail, so a failed audit insert is
- * logged without pretending the write did not happen.
+ * Writes a validated memory and returns the real blob/job ids.
+ *
+ * Walrus is the record. There is deliberately no local audit table: a Postgres row
+ * describing a Walrus write would be a second copy of something the relayer already
+ * returns, and a stale copy at that. The blob id in the returned value is the receipt.
  */
 export async function remember(userId: string, memory: BuiltMemory): Promise<RememberedMemory> {
   const namespace = userNamespace(userId);
   const result = await getMemoryClient().rememberAndWait(memory.text, namespace);
-
-  try {
-    await getDb()
-      .insert(memoryWrites)
-      .values({
-        kind: memory.kind,
-        blobId: result.blob_id,
-        jobId: result.job_id ?? result.id,
-        namespace,
-      });
-  } catch (error) {
-    getLogger().error(
-      { error: errorForLog(error), blobId: result.blob_id, kind: memory.kind },
-      "memory was written but the audit row failed",
-    );
-  }
 
   return {
     id: result.id,
@@ -112,10 +95,25 @@ export async function recall(
   query: string,
   limit = getEnv().WALRUS_RECALL_LIMIT,
 ): Promise<{ hits: RecalledMemoryHit[] }> {
+  return recallNamespace(userNamespace(userId), query, limit);
+}
+
+/**
+ * Reads a namespace by name rather than by owning user id.
+ *
+ * Walrus Memory namespaces are readable by any account holding a delegate key for the
+ * relayer, which is what lets the app reconstruct a journal from blobs alone instead of
+ * from a local table. Callers pass `userNamespace(userId)` when they mean "mine".
+ */
+export async function recallNamespace(
+  namespace: string,
+  query: string,
+  limit = getEnv().WALRUS_RECALL_LIMIT,
+): Promise<{ hits: RecalledMemoryHit[] }> {
   const result = await getMemoryClient().recall({
     query,
     limit,
-    namespace: userNamespace(userId),
+    namespace,
     sort: "relevance",
   });
 
@@ -130,6 +128,35 @@ export async function recall(
   }));
 
   return { hits };
+}
+
+/** Namespace listing, used to enumerate journals and rebuild state from Walrus alone. */
+export async function listNamespaces(): Promise<
+  ReadonlyArray<{ name: string; memoryCount: number; storageUsed: number }>
+> {
+  const memwal = getMemoryClient();
+  const namespaces: Array<{ name: string; memoryCount: number; storageUsed: number }> = [];
+
+  let cursor: string | undefined;
+  let hasMore = true;
+  let pages = 0;
+
+  while (hasMore) {
+    if (pages >= 20) break;
+    const page = await memwal.listNamespaces({ cursor, limit: 500 });
+    for (const entry of page.namespaces) {
+      namespaces.push({
+        name: entry.name,
+        memoryCount: entry.memory_count,
+        storageUsed: entry.storage_used,
+      });
+    }
+    cursor = page.next_cursor ?? undefined;
+    hasMore = page.has_more;
+    pages += 1;
+  }
+
+  return namespaces;
 }
 
 export async function listMemories(userId: string, pageSize = 100): Promise<MemoryPage> {

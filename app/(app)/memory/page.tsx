@@ -4,7 +4,7 @@ import { PreferenceForm } from "@/components/forms/PreferenceForm";
 import { EmptyState, Hash, PageHeader, ProofLine, StatCard } from "@/components/ui";
 import { formatDateTime } from "@/lib/format";
 import { requireSessionUser } from "@/lib/session";
-import { countMemoryWrites } from "@/server/data/lifecycle";
+import { MEMORY_KINDS } from "@/integrations/walrus-memory/schema";
 import { memoryLedger, recallMemories } from "@/server/data/memory";
 
 export const dynamic = "force-dynamic";
@@ -18,8 +18,9 @@ export default async function MemoryPage({
   const user = await requireSessionUser();
   const { q } = await searchParams;
   const query = q?.trim() ?? "";
-  const [ledger, auditRows] = await Promise.all([memoryLedger(user.id), countMemoryWrites()]);
+  const ledger = await memoryLedger(user.id);
   const recalled = query.length > 0 ? await recallMemories(user.id, query) : null;
+  const kindsSeen = new Set(ledger.kinds);
 
   return (
     <div>
@@ -53,9 +54,10 @@ export default async function MemoryPage({
             tone="green"
           />
           <StatCard
-            label="Local audit rows"
-            value={auditRows}
-            detail="memoryWrites table, for operators"
+            label="Memory kinds"
+            value={`${kindsSeen.size} / ${MEMORY_KINDS.length}`}
+            detail={ledger.kinds.length === 0 ? "no decoded records yet" : ledger.kinds.join(", ")}
+            tone="green"
           />
           <StatCard
             label="Recall limit"
@@ -92,20 +94,27 @@ export default async function MemoryPage({
               </p>
             ) : (
               <div className="mt-4 space-y-2">
-                {recalled.map((citation) => (
-                  <div key={citation.blobId} className="border-line rounded-xl border p-3">
+                {recalled.map((hit) => (
+                  <div key={hit.citation.blobId} className="border-line rounded-xl border p-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <Hash value={citation.blobId} head={14} tail={12} />
+                      <div className="flex items-center gap-2">
+                        <Hash value={hit.citation.blobId} head={14} tail={12} />
+                        {hit.memory ? (
+                          <span className="badge badge-neutral">{hit.memory.kind}</span>
+                        ) : (
+                          <span className="badge badge-danger">unparsed</span>
+                        )}
+                      </div>
                       <span className="mono text-amber text-[10px]">
-                        distance {citation.distance.toFixed(4)}
+                        distance {hit.citation.distance.toFixed(4)}
                       </span>
                     </div>
                     <p className="text-paper/85 mt-2 font-mono text-[11px] leading-relaxed break-all">
-                      {citation.text}
+                      {hit.citation.text}
                     </p>
-                    {citation.createdAt ? (
+                    {hit.citation.createdAt ? (
                       <p className="mono text-muted mt-2 text-[10px]">
-                        written {formatDateTime(citation.createdAt)}
+                        written {formatDateTime(hit.citation.createdAt)}
                       </p>
                     ) : null}
                   </div>
@@ -135,7 +144,11 @@ export default async function MemoryPage({
                 <ProofLine label="Namespace" value={`<prefix>:${user.id}`} />
                 <ProofLine label="Format" value="saksi:v1|type=…" />
                 <ProofLine label="Validation" value="build + parse before write" mono={false} />
-                <ProofLine label="Audit" value="memoryWrites(blobId, jobId)" />
+                <ProofLine
+                  label="Record"
+                  value="Walrus is the record, no local copy"
+                  mono={false}
+                />
               </div>
             </section>
           </aside>
@@ -145,36 +158,55 @@ export default async function MemoryPage({
           <div className="mb-3 flex items-end justify-between">
             <div>
               <p className="mono text-muted text-[10px] tracking-[0.18em] uppercase">
-                listMemories()
+                listMemories() + recall()
               </p>
               <h2 className="display mt-2 text-3xl">Relayer contents</h2>
+              <p className="text-muted mt-2 max-w-2xl text-xs leading-relaxed">
+                Metadata comes from <span className="mono">listMemories()</span>. The text is
+                decrypted by <span className="mono">recall()</span>, which is the only call that
+                returns plaintext, so every row below is what the relayer actually stores.
+              </p>
             </div>
             <span className="mono text-muted text-[10px]">
-              {ledger.page.memories.length} shown
+              {ledger.entries.length} shown
               {ledger.page.truncated ? " · truncated at the 50-page cap" : ""}
             </span>
           </div>
 
-          {ledger.page.memories.length === 0 ? (
+          {ledger.entries.length === 0 ? (
             <EmptyState
               title="This namespace is empty"
               description="Seal a pick, resolve an outcome, or write a preference. The list below comes from the relayer, so it will stay empty until a real write lands."
             />
           ) : (
-            <div className="card divide-line divide-y">
-              {ledger.page.memories.map((memory) => (
-                <div
-                  key={memory.memoryId}
-                  className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between"
-                >
-                  <div className="flex items-center gap-3">
-                    <Hash value={memory.blobId} head={16} tail={14} />
-                    <span className="badge badge-neutral">{memory.status}</span>
+            <div className="space-y-2">
+              {ledger.entries.map((entry) => (
+                <div key={entry.blobId} className="card p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Hash value={entry.blobId} head={16} tail={14} />
+                      {entry.memory ? (
+                        <span className="badge badge-neutral">{entry.memory.kind}</span>
+                      ) : (
+                        <span className="badge badge-danger">text unavailable</span>
+                      )}
+                      <span className="badge badge-neutral">{entry.status}</span>
+                    </div>
+                    <div className="text-muted mono flex items-center gap-4 text-[10px]">
+                      <span>{entry.size} bytes</span>
+                      <span>{formatDateTime(entry.createdAt)}</span>
+                    </div>
                   </div>
-                  <div className="text-muted flex items-center gap-4 text-[10px]">
-                    <span className="mono">{memory.size} bytes</span>
-                    <span className="mono">{formatDateTime(memory.createdAt)}</span>
-                  </div>
+                  {entry.memory ? (
+                    <p className="text-paper/85 mt-3 font-mono text-[11px] leading-relaxed break-all">
+                      {entry.memory.text}
+                    </p>
+                  ) : (
+                    <p className="text-muted mt-3 text-xs leading-relaxed">
+                      The relayer lists this blob but did not return its text. It is counted, not
+                      hidden.
+                    </p>
+                  )}
                 </div>
               ))}
             </div>

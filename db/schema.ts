@@ -243,19 +243,6 @@ export const payments = pgTable(
   ],
 );
 
-export const memoryWrites = pgTable(
-  "memory_writes",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    kind: text("kind").notNull(),
-    blobId: text("blob_id").notNull(),
-    jobId: text("job_id").notNull(),
-    namespace: text("namespace").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
-  },
-  (table) => [index("memory_writes_kind_idx").on(table.kind)],
-);
-
 export const recommendations = pgTable(
   "recommendations",
   {
@@ -276,5 +263,4 @@ export type PickRow = typeof picks.$inferSelect;
 export type OutcomeRow = typeof outcomes.$inferSelect;
 export type SignalRow = typeof signals.$inferSelect;
 export type PaymentRow = typeof payments.$inferSelect;
-export type MemoryWriteRow = typeof memoryWrites.$inferSelect;
 export type RecommendationRow = typeof recommendations.$inferSelect;
