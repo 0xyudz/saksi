@@ -96,8 +96,9 @@ export async function publishSignalWithWallet(input: {
   readonly signer: ClientSuiSigner;
 }): Promise<PublishedSignalResult> {
   const url = new URL("/api/signals", window.location.origin);
+  const requestBody = JSON.stringify(input.body);
 
-  const allowedAssets = await allowedAssetsFromChallenge(url, "POST");
+  const allowedAssets = await allowedAssetsFromChallenge(url, "POST", requestBody);
   const client = x402Client.fromConfig({
     schemes: [{ network: X402_NETWORK, client: new ExactSuiScheme(input.signer) }],
     spendControls: { allowedAssets: [...allowedAssets] },
@@ -108,7 +109,7 @@ export async function publishSignalWithWallet(input: {
     method: "POST",
     headers: { accept: "application/json", "content-type": "application/json" },
     credentials: "same-origin",
-    body: JSON.stringify(input.body),
+    body: requestBody,
   });
 
   if (!response.ok) throw new Error(await failureMessage(response));
@@ -139,15 +140,25 @@ async function failureMessage(response: Response): Promise<string> {
  * The seller advertises the asset it accepts (Sui USDC). `@x402/core` rejects any
  * non-default asset unless it is listed in `spendControls.allowedAssets`, so read the
  * challenge first and allow exactly the network, asset and amount the seller asked for.
+ *
+ * The challenge request must carry the same method, body and content type as the paid
+ * request that follows. The route validates the body before it settles the fee, so a
+ * preflight sent without it is answered 400 ("The listing payload is invalid.") instead of
+ * 402, and the payment wrapper then has no challenge to satisfy.
  */
 async function allowedAssetsFromChallenge(
   url: URL,
   method: "GET" | "POST" = "GET",
+  requestBody?: string,
 ): Promise<readonly SpendControlAsset[]> {
   const response = await fetch(url, {
     method,
-    headers: { accept: "application/json" },
+    headers:
+      requestBody === undefined
+        ? { accept: "application/json" }
+        : { accept: "application/json", "content-type": "application/json" },
     credentials: "same-origin",
+    ...(requestBody === undefined ? {} : { body: requestBody }),
   });
 
   if (response.status !== 402) {
@@ -155,10 +166,10 @@ async function allowedAssetsFromChallenge(
     throw new Error("The signal endpoint did not ask for an x402 payment.");
   }
 
-  const body: unknown = await response.json().catch(() => null);
+  const challengeBody: unknown = await response.json().catch(() => null);
   const challenge = new x402HTTPClient(new x402Client()).getPaymentRequiredResponse(
     (name) => response.headers.get(name),
-    body,
+    challengeBody,
   );
 
   const assets = challenge.accepts
