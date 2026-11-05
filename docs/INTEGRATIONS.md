@@ -355,8 +355,8 @@ ones recorded at the time of writing rather than constants.
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------- |
 | Walrus Memory relayer  | `status: ok`, relayer `0.1.0`                                                                                                  | `pnpm verify:memory`      |
 | Walrus write + recall  | blob `9omuWV3m0_gRnMKbgqFnwpY6TjI2ihZR_A2ZElXOrLY`, cosine distance `0.35216430960754486`, exact text returned                 | `pnpm verify:memory`      |
-| `listMemories()`       | 23 memories for the busiest namespace (`@demo_loop`), `hasMore: false` (one is added per verification run)                     | `pnpm verify:memory`      |
-| Mainnet namespaces     | 21 under `saksi:`, holding 73 memories: 65 across 14 journal namespaces, 4 identity records, 4 verification probes             | `listNamespaces()`        |
+| `listMemories()`       | 24 memories for the busiest journal (the synthetic demo loop), `hasMore: false` (one is added per verification run)            | `pnpm verify:memory`      |
+| Mainnet namespaces     | 30 under `saksi:`, 87 memories: 69 across 15 journal namespaces, 8 identity records, 6 recovery pointers, 4 probes             | `listNamespaces()`        |
 | Identity from Walrus   | wallet `0xe47cc1da…` → `@saksi_dev` in 5939 ms; unknown wallet → no journal in 390 ms, no SQL involved                         | `readJournalRecord()`     |
 | Reconstruction         | `mismatches: 0` - credibility rebuilt from memory agrees with Postgres for every analyst                                       | `pnpm verify:reconstruct` |
 | Memory changes verdict | bias memory `2 of 2 underdog picks (odds >= 2.5) lost` moved a live verdict from `proceed` to `reduce`                         | `pnpm demo:seed`          |
