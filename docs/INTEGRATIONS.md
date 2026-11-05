@@ -351,21 +351,22 @@ command and copying its output; nothing here is estimated. A Walrus write return
 id on every run and Tatum's checkpoint advances continuously, so those two values are the
 ones recorded at the time of writing rather than constants.
 
-| Area                  | Result                                                                                                                         | Command                   |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------- |
-| Walrus Memory relayer | `status: ok`, relayer `0.1.0`                                                                                                  | `pnpm verify:memory`      |
-| Walrus write + recall | blob `KWpogiSiqOxBOD8x5Z72QCnh_Nnfd7aYHE-tEfjojcM`, cosine distance `0.3566046999066741`, exact text returned                  | `pnpm verify:memory`      |
-| `listMemories()`      | 12 memories for `saksi_demo`, `hasMore: false` (one is added per verification run)                                             | `pnpm verify:memory`      |
-| Mainnet namespaces    | 18 under `saksi:`, holding 49 memories: 43 across 13 journal namespaces, 2 identity records, 4 verification probes             | `listNamespaces()`        |
-| Identity from Walrus  | wallet `0xe47cc1da…` → `@saksi_dev` in 5939 ms; unknown wallet → no journal in 390 ms, no SQL involved                         | `readJournalRecord()`     |
-| Reconstruction        | `mismatches: 0` — credibility rebuilt from memory agrees with Postgres for every analyst                                       | `pnpm verify:reconstruct` |
-| Tatum checkpoint      | `341329560` (advances; any recent value proves the query)                                                                      | `pnpm verify:tatum`       |
-| Tatum transaction     | `DemaKkYM7Ni4mRJcxbth3e4h3BkkqgKnR1MYPdWhmgjq`, status `success`, 2 balance changes                                            | `pnpm verify:tatum`       |
-| Tatum balance         | operator agent `0` atomic USDC; merchant `10000` after settlement                                                              | `pnpm verify:tatum`       |
-| x402 settlement       | one real $0.01 USDC purchase, paid by a self-custody browser wallet and verified through Tatum before the payload was released | browser + `payments`      |
-| Oracle fixtures       | 8 completed `eng.1` fixtures on 2026-10-31, each resolving to exactly one winner, including two draws                          | `pnpm verify:oracle`      |
-| Oracle agreement      | "Chelsea to win" on `espn:eng.1:401879248` (Chelsea 2-0 Man Utd) stored as `oracle_verified`                                   | `outcomes`                |
-| Oracle contradiction  | a claimed win on a fixture the provider made a loss stored as `oracle_contradicted`, owner's claim preserved                   | `outcomes`                |
+| Area                   | Result                                                                                                                         | Command                   |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------- |
+| Walrus Memory relayer  | `status: ok`, relayer `0.1.0`                                                                                                  | `pnpm verify:memory`      |
+| Walrus write + recall  | blob `KWpogiSiqOxBOD8x5Z72QCnh_Nnfd7aYHE-tEfjojcM`, cosine distance `0.3566046999066741`, exact text returned                  | `pnpm verify:memory`      |
+| `listMemories()`       | 12 memories for `saksi_demo`, `hasMore: false` (one is added per verification run)                                             | `pnpm verify:memory`      |
+| Mainnet namespaces     | 21 under `saksi:`, holding 73 memories: 65 across 14 journal namespaces, 4 identity records, 4 verification probes             | `listNamespaces()`        |
+| Identity from Walrus   | wallet `0xe47cc1da…` → `@saksi_dev` in 5939 ms; unknown wallet → no journal in 390 ms, no SQL involved                         | `readJournalRecord()`     |
+| Reconstruction         | `mismatches: 0` - credibility rebuilt from memory agrees with Postgres for every analyst                                       | `pnpm verify:reconstruct` |
+| Memory changes verdict | bias memory `2 of 2 underdog picks (odds >= 2.5) lost` moved a live verdict from `proceed` to `reduce`                         | `pnpm demo:seed`          |
+| Tatum checkpoint       | `341329560` (advances; any recent value proves the query)                                                                      | `pnpm verify:tatum`       |
+| Tatum transaction      | `DemaKkYM7Ni4mRJcxbth3e4h3BkkqgKnR1MYPdWhmgjq`, status `success`, 2 balance changes                                            | `pnpm verify:tatum`       |
+| Tatum balance          | operator agent `0` atomic USDC; merchant `10000` after settlement                                                              | `pnpm verify:tatum`       |
+| x402 settlement        | one real $0.01 USDC purchase, paid by a self-custody browser wallet and verified through Tatum before the payload was released | browser + `payments`      |
+| Oracle fixtures        | 8 completed `eng.1` fixtures on 2026-10-31, each resolving to exactly one winner, including two draws                          | `pnpm verify:oracle`      |
+| Oracle agreement       | "Chelsea to win" on `espn:eng.1:401879248` (Chelsea 2-0 Man Utd) stored as `oracle_verified`                                   | `outcomes`                |
+| Oracle contradiction   | a claimed win on a fixture the provider made a loss stored as `oracle_contradicted`, owner's claim preserved                   | `outcomes`                |
 
 ## Still unverified
 

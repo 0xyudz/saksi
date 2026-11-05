@@ -342,6 +342,23 @@ text is returned, and prints the blob ID plus relayer count. `verify:tatum` chec
 latest checkpoint, a real transaction and the operator wallet balance. `verify:x402` buys
 the paywalled signal, prints the digest, and independently verifies it through Tatum.
 
+Two more scripts exist because two claims could not be verified any other way:
+
+```bash
+# Rebuilds every journal's credibility from Walrus alone and diffs it against Postgres.
+pnpm verify:reconstruct
+
+# Seeds a synthetic journal so the bias detector has something to detect.
+pnpm demo:seed https://saksi-psi.vercel.app <out-file-outside-the-repo>
+```
+
+`demo:seed` claims its own journal (`@demo_loop`) by signing a real challenge with a freshly
+generated keypair, then writes five winning favourites and two losing underdogs. Everything
+it writes is prefixed `synthetic demo` and its outcomes are `self_attested`, so nothing in it
+can be mistaken for a real forecast. It writes only the recovery code to `<out-file>` (mode
+`0600`); the private key is never persisted. Pass `--wallet 0x...` to seed an existing
+journal instead, in which case no file is written.
+
 ## Tests
 
 ```bash
@@ -436,33 +453,34 @@ values move on their own: a Walrus write produces a new blob id on every run, an
 checkpoint advances continuously. The blob id and distance below are from one recorded run;
 re-running `verify:memory` proves the same path with fresh values.
 
-| Proof                               | Value                                                                                            | Produced by                      |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------ | -------------------------------- |
-| Walrus Memory relayer               | `status: ok`, relayer `0.1.0`                                                                    | `pnpm verify:memory`             |
-| Walrus Memory blob ID (fresh write) | `KWpogiSiqOxBOD8x5Z72QCnh_Nnfd7aYHE-tEfjojcM`                                                    | `pnpm verify:memory`             |
-| Walrus Memory recall distance       | `0.3566046999066741` (cosine)                                                                    | `pnpm verify:memory`             |
-| Walrus Memory blob ID (sealed pick) | `RruPtIKgN3QZyEmUNOIVqA_yrk8mBylE8Bsg4h9O0NA` (`pick_commit`)                                    | relayer read                     |
-| Walrus Memory blob ID (payment)     | `iQkdVACTG5arG58RDCnYr74_dJPeueaeJ9NTGheeBRA` (`payment`)                                        | relayer read                     |
-| Walrus Memory blob ID (source ROI)  | `KkHx_aFl4YkIBBGF3bQ4hMMljtdhshUUTVMxhEqbjcE` (`source_roi`)                                     | relayer read                     |
-| Mainnet namespaces                  | 18 under `saksi:`, 49 memories: 43 across 13 journal namespaces, 2 identity records, 4 probes    | `listNamespaces()`               |
-| Identity resolved without SQL       | wallet `0xe47cc1da…` → `@saksi_dev` in 5939 ms; unknown wallet → none in 390 ms                  | `readJournalRecord()`            |
-| Reconstruction from Walrus          | `mismatches: 0` — rebuilt credibility equals the Postgres figures for every analyst              | `pnpm verify:reconstruct`        |
-| Tatum checkpoint                    | `341329560` (advances; any recent value proves the query)                                        | `pnpm verify:tatum`              |
-| Tatum transaction digest            | `DemaKkYM7Ni4mRJcxbth3e4h3BkkqgKnR1MYPdWhmgjq` — status `success`, 2 balance changes             | `pnpm verify:tatum`              |
-| x402 settlement digest              | `DemaKkYM7Ni4mRJcxbth3e4h3BkkqgKnR1MYPdWhmgjq` — 10000 atomic USDC, `sui:mainnet`                | browser wallet + Tatum           |
-| x402 payer                          | `0xe47cc1da1a36461dbfbc2431b36b8579403d105d8d2a6fe05c442071905d8900`                             | `payments`                       |
-| x402 merchant                       | `0x5fb8e783752ba7ec09ee4c7c7a91bb51a4a643cd8a7473643a95c1a56b7e6432`                             | `.env.local` payee               |
-| Merchant USDC balance after settle  | `10000` atomic ($0.01)                                                                           | Tatum GraphQL                    |
-| Agent (operator) USDC balance       | `0` — the operator key never paid; the buyer did                                                 | `pnpm verify:tatum`              |
-| Explorer link                       | <https://suivision.xyz/txblock/DemaKkYM7Ni4mRJcxbth3e4h3BkkqgKnR1MYPdWhmgjq>                     | chain                            |
-| Oracle fixtures read                | 8 completed `eng.1` fixtures on 2026-10-31, each resolving to exactly one winner                 | `pnpm verify:oracle`             |
-| Oracle verified outcome             | pick `a228a98a…` — "Chelsea to win", provider `Chelsea 2-0 Manchester United`, `oracle_verified` | `outcomes`                       |
-| Oracle contradicted outcome         | pick `ae1de891…` — claimed win, provider made it a loss, stored `oracle_contradicted`            | `outcomes`                       |
-| Wallet signature rejected           | malformed 64-byte signature → `401`, not `500` (regression fixed)                                | `tests/wallet-signature.test.ts` |
-| Legacy journal refused for selling  | uuid-ref session → `403`, asking for a wallet-claimed journal                                    | `requireSellerUserId()`          |
-| Listing fee challenge               | `402`, `amount=20000` atomic ($0.02), `payTo` = platform, `sui:mainnet`                          | probe against live server        |
-| Public journal read                 | `/journals` 200 with 13 namespaces; `/journals/<uuid>` 200; `other:123` → 404                    | live deployment                  |
-| Dashboard screenshot                | not captured                                                                                     | —                                |
+| Proof                               | Value                                                                                             | Produced by                      |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------- | -------------------------------- |
+| Walrus Memory relayer               | `status: ok`, relayer `0.1.0`                                                                     | `pnpm verify:memory`             |
+| Walrus Memory blob ID (fresh write) | `KWpogiSiqOxBOD8x5Z72QCnh_Nnfd7aYHE-tEfjojcM`                                                     | `pnpm verify:memory`             |
+| Walrus Memory recall distance       | `0.3566046999066741` (cosine)                                                                     | `pnpm verify:memory`             |
+| Walrus Memory blob ID (sealed pick) | `RruPtIKgN3QZyEmUNOIVqA_yrk8mBylE8Bsg4h9O0NA` (`pick_commit`)                                     | relayer read                     |
+| Walrus Memory blob ID (payment)     | `iQkdVACTG5arG58RDCnYr74_dJPeueaeJ9NTGheeBRA` (`payment`)                                         | relayer read                     |
+| Walrus Memory blob ID (source ROI)  | `KkHx_aFl4YkIBBGF3bQ4hMMljtdhshUUTVMxhEqbjcE` (`source_roi`)                                      | relayer read                     |
+| Mainnet namespaces                  | 21 under `saksi:`, 73 memories: 65 across 14 journal namespaces, 4 identity records, 4 probes     | `listNamespaces()`               |
+| Identity resolved without SQL       | wallet `0xe47cc1da…` → `@saksi_dev` in 5939 ms; unknown wallet → none in 390 ms                   | `readJournalRecord()`            |
+| Reconstruction from Walrus          | `mismatches: 0` - rebuilt credibility equals the Postgres figures for every analyst               | `pnpm verify:reconstruct`        |
+| Memory changes a verdict            | bias memory `2 of 2 underdog picks (odds >= 2.5) lost` moved `proceed` -> `reduce` on a live call | `pnpm demo:seed`                 |
+| Tatum checkpoint                    | `341329560` (advances; any recent value proves the query)                                         | `pnpm verify:tatum`              |
+| Tatum transaction digest            | `DemaKkYM7Ni4mRJcxbth3e4h3BkkqgKnR1MYPdWhmgjq` — status `success`, 2 balance changes              | `pnpm verify:tatum`              |
+| x402 settlement digest              | `DemaKkYM7Ni4mRJcxbth3e4h3BkkqgKnR1MYPdWhmgjq` — 10000 atomic USDC, `sui:mainnet`                 | browser wallet + Tatum           |
+| x402 payer                          | `0xe47cc1da1a36461dbfbc2431b36b8579403d105d8d2a6fe05c442071905d8900`                              | `payments`                       |
+| x402 merchant                       | `0x5fb8e783752ba7ec09ee4c7c7a91bb51a4a643cd8a7473643a95c1a56b7e6432`                              | `.env.local` payee               |
+| Merchant USDC balance after settle  | `10000` atomic ($0.01)                                                                            | Tatum GraphQL                    |
+| Agent (operator) USDC balance       | `0` — the operator key never paid; the buyer did                                                  | `pnpm verify:tatum`              |
+| Explorer link                       | <https://suivision.xyz/txblock/DemaKkYM7Ni4mRJcxbth3e4h3BkkqgKnR1MYPdWhmgjq>                      | chain                            |
+| Oracle fixtures read                | 8 completed `eng.1` fixtures on 2026-10-31, each resolving to exactly one winner                  | `pnpm verify:oracle`             |
+| Oracle verified outcome             | pick `a228a98a…` — "Chelsea to win", provider `Chelsea 2-0 Manchester United`, `oracle_verified`  | `outcomes`                       |
+| Oracle contradicted outcome         | pick `ae1de891…` — claimed win, provider made it a loss, stored `oracle_contradicted`             | `outcomes`                       |
+| Wallet signature rejected           | malformed 64-byte signature → `401`, not `500` (regression fixed)                                 | `tests/wallet-signature.test.ts` |
+| Legacy journal refused for selling  | uuid-ref session → `403`, asking for a wallet-claimed journal                                     | `requireSellerUserId()`          |
+| Listing fee challenge               | `402`, `amount=20000` atomic ($0.02), `payTo` = platform, `sui:mainnet`                           | probe against live server        |
+| Public journal read                 | `/journals` 200 with 14 namespaces; `/journals/<uuid>` 200; `other:123` → 404                     | live deployment                  |
+| Dashboard screenshot                | not captured                                                                                      | —                                |
 
 Reproduce the script-backed rows with:
 
@@ -502,6 +520,12 @@ only record, which is exactly what `listNamespaces()` reads.
 - Outcomes outside the oracle's scope are self-attested. `sourceUrl` is validated as an
   http(s) URL but its content is never fetched, so the hash and the calibration score do not
   establish that the cited result is true.
+- The recorded proof that memory changes a verdict comes from a **synthetic** journal
+  (`@demo_loop`) created by `pnpm demo:seed`, not from a real user's betting history. It
+  proves the detector and the downgrade path work end to end on live infrastructure; it does
+  not prove the pattern was ever true of a real person. Every record it wrote is prefixed
+  `synthetic demo` and marked `self_attested`, and the live database before it had no bias
+  memory at all because all four resolved picks happened to win.
 - Tatum serves Sui over GraphQL (`/graphql`) and gRPC only; JSON-RPC is deprecated. This
   client targets the mainnet GraphQL gateway, so a testnet deployment would need a gRPC
   client that this repository does not implement.

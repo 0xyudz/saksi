@@ -24,7 +24,8 @@
     "verify:x402": "tsx scripts/verify-x402.ts",
     "verify:oracle": "tsx scripts/verify-oracle.ts",
     "verify:reconstruct": "tsx scripts/verify-reconstruct.ts",
-    "recovery:issue": "tsx scripts/issue-recovery-code.ts"
+    "recovery:issue": "tsx scripts/issue-recovery-code.ts",
+    "demo:seed": "tsx scripts/seed-demo-loop.ts"
   },
   "dependencies": {
     "@mysten-incubation/memwal": "^0.1.11",

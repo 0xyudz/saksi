@@ -959,7 +959,7 @@ Three design notes:
 pick id inside the text, then feeds the result to the same `credibilityBreakdown()` and
 `detectBias()` the SQL path uses. Nothing in it reads Postgres.
 
-Measured on the production relayer, 16 namespaces holding 44 memories:
+Measured on the production relayer, 21 namespaces holding 73 memories:
 
 | Operation                          | Time           |
 | ---------------------------------- | -------------- |
@@ -988,6 +988,46 @@ Three consequences, all deliberate:
 discovers journals from `picks.journal_ref`, since there is no `users` table to enumerate.
 Last run: **0 mismatches**. It is the evidence for the claim in §6.8, and it exits non-zero
 when the two disagree.
+
+### 11.2 Seeding the learning loop, honestly
+
+The bias detector needs two losses in the same bucket before it says anything. Every
+resolved pick in the live database happened to win, so `detectBias()` never fired and the
+product's central claim — that a recalled memory changes the next verdict — had no evidence
+behind it. `scripts/seed-demo-loop.ts` creates that evidence rather than asserting it.
+
+It is written to be difficult to mistake for real data:
+
+- It **claims its own journal** (`@demo_loop`) by generating an Ed25519 keypair and signing
+  the real `claim` challenge, so the signature path under test is the product's own. A
+  broken verifier fails here instead of producing a journal nothing can sign into.
+- Every market and selection is prefixed `synthetic demo`, and the analyst is named
+  `DEMO synthetic analyst (demo_loop)`.
+- `sourceUrl` points at the journal's own page. These resolutions are self-attested and the
+  stored `verification` column says `self_attested`; no oracle fixture is claimed.
+- It refuses a `localhost` base URL and refuses to write the recovery file inside the
+  repository, because both would end up in permanent public blobs or in git.
+- Only the **recovery code** is written to disk (mode `0600`). The generated private key is
+  never persisted, so the file grants access without granting control of the address.
+
+The composition matters. Five favourites that won (1.25–1.35) put credibility at 56, which
+is `proceed`; the two underdog losses then fire the bias pattern, and the same call returns
+`reduce`. A losing record would have produced `avoid` both before and after the downgrade,
+which would prove nothing about memory changing a decision.
+
+Measured run against production:
+
+```txt
+bias=2 of 2 underdog picks (odds >= 2.5) lost
+verdict reduce
+summary Memory changed the verdict from proceed to reduce: 2 of 2 underdog picks (odds >= 2.5) lost.
+warning bias (evidence 2)
+warning credibility (evidence 7) No oracle-confirmed outcome yet
+```
+
+If the bias warning does not appear, the script prints `NO BIAS WARNING` and says the
+verdict did not change. That is deliberate: a seeder that reported success regardless would
+be worse than no seeder.
 
 ---
 
