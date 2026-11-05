@@ -16,10 +16,9 @@ Built for **Total Recall — Tatum × Walrus Memory** (Track 1: Markets & Sports
 | ------------------------------------- | ---------------------------------------------------------------------------- |
 | `pnpm typecheck`                      | passes                                                                       |
 | `pnpm lint`                           | passes                                                                       |
-| `pnpm test`                           | 140 tests pass across 17 files                                               |
+| `pnpm test`                           | 160 tests pass across 19 files                                               |
 | `pnpm build`                          | passes (Next.js 16.4.3, Turbopack)                                           |
-| Migrations generated                  | `0000`–`0005`                                                                |
-| Migrations applied to a live database | yes — 8 tables on a live Postgres instance                                   |
+| Migrations applied to a live database | yes — 7 tables on a live Postgres instance (`0000`–`0007`)                   |
 | Walrus Memory (mainnet relayer)       | verified — `pnpm verify:memory` writes, recalls and lists real blobs         |
 | Tatum GraphQL (`sui:mainnet`)         | verified — `pnpm verify:tatum` reads checkpoint, transaction and balance     |
 | x402 on Sui mainnet                   | verified — one real $0.01 USDC settlement, verified by Tatum and recorded    |
@@ -28,8 +27,8 @@ Built for **Total Recall — Tatum × Walrus Memory** (Track 1: Markets & Sports
 | Deployed instance                     | yes — <https://saksi-psi.vercel.app> (Vercel, region `sin1`)                 |
 
 Every value in [Proof](#proof) was produced by the command named beside it against Sui
-mainnet on 2 Nov 2026, and nothing there is estimated. The settlement in that table came
-from a self-custody browser wallet signing its own payment, not from an operator key.
+mainnet, and nothing there is estimated. The settlement in that table came from a
+self-custody browser wallet signing its own payment, not from an operator key.
 
 Companion documents:
 
@@ -69,12 +68,13 @@ Companion documents:
    with calibration and per-sample verification badges, a seller panel showing settled
    earnings per listing, memory ledger fetched from `listMemories()` (with a truncation
    flag, not a claimed namespace total), and the payment ledger.
-7. **Wallet-first identity** — one proven wallet claims one handle, enforced by a unique
-   index on `users.wallet_address`. Login is a signature over a server-issued challenge
-   whose exact bytes are stored, so verification can never drift from what the user
-   approved; the nonce is consumed before the signature check, so a replay fails even with
-   a valid signature. A 24-symbol recovery code (`scrypt N=16384, r=8, p=1`) is the
-   fallback if the wallet is lost. `/resume` accepts either path.
+7. **Wallet-first identity** — a journal _is_ the Sui address that proved ownership of it.
+   There is no user table: the address is the ref, so it cannot collide. Login is a
+   signature over a server-issued challenge whose exact bytes are stored, so verification
+   can never drift from what the user approved; the nonce is consumed before the signature
+   check, so a replay fails even with a valid signature. The handle is a display name read
+   from Walrus and is deliberately not unique. A 24-symbol recovery code, written to
+   `saksi:recovery:<sha256(code)>`, is the fallback if the wallet is lost.
 
 ## Quick start
 
@@ -225,8 +225,15 @@ Rules enforced throughout:
 
 ## Data model
 
-`users`, `analysts`, `picks`, `outcomes`, `signals`, `payments`, `memory_writes`,
+Seven tables: `analysts`, `picks`, `outcomes`, `signals`, `payments`, `wallet_challenges`,
 `recommendations`. See `db/schema.ts`.
+
+There is no `users` table. A journal is the Sui address that proved ownership of it, so
+identity is a signature rather than a row. `picks.journal_ref`, `signals.seller_ref` and
+`payments.journal_ref` hold that ref — a lowercase address for journals created after
+migration `0007`, or a uuid for journals created before it, because Walrus is append-only and
+their memories already live in `saksi:<uuid>`. The handle survives only as a display name in
+Walrus, which is why it is no longer unique.
 
 Key constraints:
 
@@ -235,10 +242,10 @@ Key constraints:
 - `payments.digest` is unique, making settlement recording and buyer claiming idempotent.
 - `signals(provider, externalRef)` is unique, and `listing_fee_digest` is unique so one fee
   publishes exactly one listing.
-- `memory_writes` is an audit trail only; `/memory` reads the relayer.
 - Walrus memory kinds are split by lifecycle: `pick_commit` (market, hash, timestamp),
   `pick_reveal` (selection, odds, reveal time), then `outcome`, `bias`, `source_roi`,
-  `payment` and `preference`. Legacy `pick` records remain readable and are never written.
+  `payment` and `preference`. `journal` and `recovery` are identity records and are excluded
+  from journal history. Legacy `pick` records remain readable and are never written.
 - Analysts are global, not owned by a journal, so deleting a journal leaves its analysts
   behind. Clean them up deliberately rather than by cascade:
 
@@ -254,7 +261,11 @@ pnpm db:generate
 pnpm db:migrate
 ```
 
-All six migrations (`0000`–`0005`) are applied to the live database this project was built
+If drizzle-kit wants to confirm a column rename it needs a TTY and will refuse in a scripted
+shell; write the migration SQL by hand and add its entry to
+`db/migrations/meta/_journal.json`. That is how `0007_journal_identity.sql` was written.
+
+All seven migrations (`0000`–`0007`) are applied to the live database this project was built
 against, and `pnpm db:migrate` must be run once against any new database before the app
 starts.
 
@@ -266,12 +277,14 @@ anything.
 
 Marketing:
 
-| Route           | Purpose                                                                      |
-| --------------- | ---------------------------------------------------------------------------- |
-| `/`             | landing page: what Saksi is, the four steps, the stack, the honest limits    |
-| `/how-it-works` | the lifecycle, the canonical hash, the scoring formula and the x402 sequence |
-| `/docs`         | index of the documents below                                                 |
-| `/docs/[slug]`  | renders `README.md` and the four files in `docs/` directly, statically       |
+| Route                   | Purpose                                                                      |
+| ----------------------- | ---------------------------------------------------------------------------- |
+| `/`                     | landing page: what Saksi is, the four steps, the stack, the honest limits    |
+| `/how-it-works`         | the lifecycle, the canonical hash, the scoring formula and the x402 sequence |
+| `/docs`                 | index of the documents below                                                 |
+| `/docs/[slug]`          | renders `README.md` and the four files in `docs/` directly, statically       |
+| `/journals`             | live journal list read from the relayer, no SQL                              |
+| `/journals/[namespace]` | one journal's history rebuilt from its Walrus memories                       |
 
 Journal:
 
@@ -279,8 +292,8 @@ Journal:
 | ------------------------------------- | ------------------------------------------------------------------------------------ |
 | `/dashboard`                          | stats, seller earnings panel, leaderboard, latest picks, memory decision, Tatum feed |
 | `/onboarding`                         | claim a handle by proving a wallet; shows the one-time recovery code                 |
-| `/resume`                             | sign in with the bound wallet, or fall back to handle + recovery code                |
-| `/settings/wallet`                    | bind a wallet to a journal created before wallet auth existed                        |
+| `/resume`                             | sign in with the recovery code alone; no handle is asked for                         |
+| `/settings/wallet`                    | read-only: the address that _is_ the journal, and how the signature proof works      |
 | `/picks`, `/picks/new`, `/picks/[id]` | ledger, sealed pick form with oracle fixture picker, proof detail + reveal/resolve   |
 | `/analysts`, `/analysts/[id]`         | leaderboard, verified score, calibration and per-sample verification                 |
 | `/memory`                             | relayer health, fetched `listMemories()` pages, recall with paired citations         |
@@ -289,25 +302,24 @@ Journal:
 
 API:
 
-| Route                           | Notes                                                      |
-| ------------------------------- | ---------------------------------------------------------- |
-| `POST /api/picks`               | seal a pick; rolls back on memory failure                  |
-| `POST /api/picks/[id]/reveal`   | owner only; hash + time-lock checked                       |
-| `POST /api/picks/[id]/resolve`  | owner only; oracle consulted, contradiction recorded       |
-| `GET /api/oracle/fixtures`      | fixtures for one league/date, so a picker can link one     |
-| `POST /api/recommendations`     | recall before deciding; persists citations                 |
-| `GET /api/signals`              | public catalogue; only fee-verified listings appear        |
-| `POST /api/signals`             | x402 listing fee, then publish; wallet proof required      |
-| `GET /api/signals/[id]`         | x402 paywall; Tatum verification before release            |
-| `POST /api/payments/verify`     | read-only Tatum check; reports `recorded`, never inserts   |
-| `GET /api/payments`             | ledger + Tatum merchant balance/events                     |
-| `GET /api/health`               | database + Walrus + Tatum checks, no secrets               |
-| `PUT /api/session`              | issue a single-use signature challenge (claim/login/bind)  |
-| `POST /api/session`             | claim a handle with the wallet signature; returns the code |
-| `POST /api/session/wallet`      | sign in with the wallet already bound to a journal         |
-| `POST /api/session/wallet/bind` | bind a wallet to an existing journal, one-way              |
-| `PATCH /api/session`            | resume with handle + recovery code; rate limited           |
-| `DELETE /api/session`           | log out                                                    |
+| Route                          | Notes                                                      |
+| ------------------------------ | ---------------------------------------------------------- |
+| `POST /api/picks`              | seal a pick; rolls back on memory failure                  |
+| `POST /api/picks/[id]/reveal`  | owner only; hash + time-lock checked                       |
+| `POST /api/picks/[id]/resolve` | owner only; oracle consulted, contradiction recorded       |
+| `GET /api/oracle/fixtures`     | fixtures for one league/date, so a picker can link one     |
+| `POST /api/recommendations`    | recall before deciding; persists citations                 |
+| `GET /api/signals`             | public catalogue; only fee-verified listings appear        |
+| `POST /api/signals`            | x402 listing fee, then publish; wallet proof required      |
+| `GET /api/signals/[id]`        | x402 paywall; Tatum verification before release            |
+| `POST /api/payments/verify`    | read-only Tatum check; reports `recorded`, never inserts   |
+| `GET /api/payments`            | ledger + Tatum merchant balance/events                     |
+| `GET /api/health`              | database + Walrus + Tatum checks, no secrets               |
+| `PUT /api/session`             | issue a single-use signature challenge (claim/login)       |
+| `POST /api/session`            | claim a handle with the wallet signature; returns the code |
+| `POST /api/session/wallet`     | sign in by proving the wallet; the address is the journal  |
+| `PATCH /api/session`           | resume with the recovery code; rate limited                |
+| `DELETE /api/session`          | log out                                                    |
 
 ## Verification scripts
 
@@ -396,9 +408,8 @@ server is expected to return.
 - Wallet login signs a server-issued challenge whose exact bytes are stored in
   `wallet_challenges.message`, so verification cannot drift from what the user approved. The
   nonce is consumed atomically **before** the signature check, so a replayed nonce fails
-  even with a valid signature. Login and bind also compare the proven challenge address with
-  the address in the request body, so a signature for one wallet cannot authenticate or
-  claim another.
+  even with a valid signature. Login also compares the proven challenge address with the
+  address in the request body, so a signature for one wallet cannot claim another.
 - A listing body is validated before the x402 facilitator settles the listing fee. Invalid
   input therefore returns `400` without moving money, and a valid body without payment still
   receives the `402` challenge.
@@ -425,32 +436,33 @@ values move on their own: a Walrus write produces a new blob id on every run, an
 checkpoint advances continuously. The blob id and distance below are from one recorded run;
 re-running `verify:memory` proves the same path with fresh values.
 
-| Proof                               | Value                                                                                                | Produced by                      |
-| ----------------------------------- | ---------------------------------------------------------------------------------------------------- | -------------------------------- |
-| Walrus Memory relayer               | `status: ok`, relayer `0.1.0`                                                                        | `pnpm verify:memory`             |
-| Walrus Memory blob ID (fresh write) | `tO58wlvK_zeGbWMS9sWf284bMr9c_Y2uuQQsj20kKMw`                                                        | `pnpm verify:memory`             |
-| Walrus Memory recall distance       | `0.35998293954418614` (cosine)                                                                       | `pnpm verify:memory`             |
-| Walrus Memory blob ID (sealed pick) | `RruPtIKgN3QZyEmUNOIVqA_yrk8mBylE8Bsg4h9O0NA` (`pick_commit`)                                        | `memory_writes`                  |
-| Walrus Memory blob ID (payment)     | `iQkdVACTG5arG58RDCnYr74_dJPeueaeJ9NTGheeBRA` (`payment`)                                            | `memory_writes`                  |
-| Walrus Memory blob ID (source ROI)  | `KkHx_aFl4YkIBBGF3bQ4hMMljtdhshUUTVMxhEqbjcE` (`source_roi`)                                         | `memory_writes`                  |
-| Mainnet memories written            | 38 rows: `pick_commit` 12, `pick_reveal` 8, `outcome` 8, `preference` 8, `payment` 1, `source_roi` 1 | `memory_writes`                  |
-| Tatum checkpoint                    | `341329560` (advances; any recent value proves the query)                                            | `pnpm verify:tatum`              |
-| Tatum transaction digest            | `DemaKkYM7Ni4mRJcxbth3e4h3BkkqgKnR1MYPdWhmgjq` — status `success`, 2 balance changes                 | `pnpm verify:tatum`              |
-| x402 settlement digest              | `DemaKkYM7Ni4mRJcxbth3e4h3BkkqgKnR1MYPdWhmgjq` — 10000 atomic USDC, `sui:mainnet`                    | browser wallet + Tatum           |
-| x402 payer                          | `0xe47cc1da1a36461dbfbc2431b36b8579403d105d8d2a6fe05c442071905d8900`                                 | `payments`                       |
-| x402 merchant                       | `0x5fb8e783752ba7ec09ee4c7c7a91bb51a4a643cd8a7473643a95c1a56b7e6432`                                 | `.env.local` payee               |
-| Merchant USDC balance after settle  | `10000` atomic ($0.01)                                                                               | Tatum GraphQL                    |
-| Agent (operator) USDC balance       | `0` — the operator key never paid; the buyer did                                                     | `pnpm verify:tatum`              |
-| Explorer link                       | <https://suivision.xyz/txblock/DemaKkYM7Ni4mRJcxbth3e4h3BkkqgKnR1MYPdWhmgjq>                         | chain                            |
-| Oracle fixtures read                | 8 completed `eng.1` fixtures on 2026-10-31, each resolving to exactly one winner                     | `pnpm verify:oracle`             |
-| Oracle verified outcome             | pick `a228a98a…` — "Chelsea to win", provider `Chelsea 2-0 Manchester United`, `oracle_verified`     | `outcomes`                       |
-| Oracle contradicted outcome         | pick `ae1de891…` — claimed win, provider made it a loss, stored `oracle_contradicted`                | `outcomes`                       |
-| Wallet signature rejected           | malformed 64-byte signature → `401`, not `500` (regression fixed)                                    | `tests/wallet-signature.test.ts` |
-| One wallet, one handle              | second claim with the same address → `409`                                                           | probe against live server        |
-| Wallet rebind refused               | binding a second address to a bound journal → `409`                                                  | probe against live server        |
-| Listing fee challenge               | `402`, `amount=20000` atomic ($0.02), `payTo` = platform, `sui:mainnet`                              | probe against live server        |
-| Publish without a wallet            | `403`, naming the missing payout address                                                             | probe against live server        |
-| Dashboard screenshot                | not captured                                                                                         | —                                |
+| Proof                               | Value                                                                                            | Produced by                      |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------ | -------------------------------- |
+| Walrus Memory relayer               | `status: ok`, relayer `0.1.0`                                                                    | `pnpm verify:memory`             |
+| Walrus Memory blob ID (fresh write) | `KWpogiSiqOxBOD8x5Z72QCnh_Nnfd7aYHE-tEfjojcM`                                                    | `pnpm verify:memory`             |
+| Walrus Memory recall distance       | `0.3566046999066741` (cosine)                                                                    | `pnpm verify:memory`             |
+| Walrus Memory blob ID (sealed pick) | `RruPtIKgN3QZyEmUNOIVqA_yrk8mBylE8Bsg4h9O0NA` (`pick_commit`)                                    | relayer read                     |
+| Walrus Memory blob ID (payment)     | `iQkdVACTG5arG58RDCnYr74_dJPeueaeJ9NTGheeBRA` (`payment`)                                        | relayer read                     |
+| Walrus Memory blob ID (source ROI)  | `KkHx_aFl4YkIBBGF3bQ4hMMljtdhshUUTVMxhEqbjcE` (`source_roi`)                                     | relayer read                     |
+| Mainnet namespaces                  | 18 under `saksi:`, 49 memories: 43 across 13 journal namespaces, 2 identity records, 4 probes    | `listNamespaces()`               |
+| Identity resolved without SQL       | wallet `0xe47cc1da…` → `@saksi_dev` in 5939 ms; unknown wallet → none in 390 ms                  | `readJournalRecord()`            |
+| Reconstruction from Walrus          | `mismatches: 0` — rebuilt credibility equals the Postgres figures for every analyst              | `pnpm verify:reconstruct`        |
+| Tatum checkpoint                    | `341329560` (advances; any recent value proves the query)                                        | `pnpm verify:tatum`              |
+| Tatum transaction digest            | `DemaKkYM7Ni4mRJcxbth3e4h3BkkqgKnR1MYPdWhmgjq` — status `success`, 2 balance changes             | `pnpm verify:tatum`              |
+| x402 settlement digest              | `DemaKkYM7Ni4mRJcxbth3e4h3BkkqgKnR1MYPdWhmgjq` — 10000 atomic USDC, `sui:mainnet`                | browser wallet + Tatum           |
+| x402 payer                          | `0xe47cc1da1a36461dbfbc2431b36b8579403d105d8d2a6fe05c442071905d8900`                             | `payments`                       |
+| x402 merchant                       | `0x5fb8e783752ba7ec09ee4c7c7a91bb51a4a643cd8a7473643a95c1a56b7e6432`                             | `.env.local` payee               |
+| Merchant USDC balance after settle  | `10000` atomic ($0.01)                                                                           | Tatum GraphQL                    |
+| Agent (operator) USDC balance       | `0` — the operator key never paid; the buyer did                                                 | `pnpm verify:tatum`              |
+| Explorer link                       | <https://suivision.xyz/txblock/DemaKkYM7Ni4mRJcxbth3e4h3BkkqgKnR1MYPdWhmgjq>                     | chain                            |
+| Oracle fixtures read                | 8 completed `eng.1` fixtures on 2026-10-31, each resolving to exactly one winner                 | `pnpm verify:oracle`             |
+| Oracle verified outcome             | pick `a228a98a…` — "Chelsea to win", provider `Chelsea 2-0 Manchester United`, `oracle_verified` | `outcomes`                       |
+| Oracle contradicted outcome         | pick `ae1de891…` — claimed win, provider made it a loss, stored `oracle_contradicted`            | `outcomes`                       |
+| Wallet signature rejected           | malformed 64-byte signature → `401`, not `500` (regression fixed)                                | `tests/wallet-signature.test.ts` |
+| Legacy journal refused for selling  | uuid-ref session → `403`, asking for a wallet-claimed journal                                    | `requireSellerUserId()`          |
+| Listing fee challenge               | `402`, `amount=20000` atomic ($0.02), `payTo` = platform, `sui:mainnet`                          | probe against live server        |
+| Public journal read                 | `/journals` 200 with 13 namespaces; `/journals/<uuid>` 200; `other:123` → 404                    | live deployment                  |
+| Dashboard screenshot                | not captured                                                                                     | —                                |
 
 Reproduce the script-backed rows with:
 
@@ -470,8 +482,9 @@ demo payload** everywhere it appears. It exists to exercise the paywall, not to 
 forecast was sold.
 
 Some of those memories came from the end-to-end checks above, whose journals were deleted
-afterwards. Walrus blobs cannot be deleted once written, so the row count is higher than the
-number of surviving journals; `memory_writes` still records the real blob id of every write.
+afterwards. Walrus blobs cannot be deleted once written, so the memory count is higher than
+the number of surviving journals. There is no local write log to consult: the relayer is the
+only record, which is exactly what `listNamespaces()` reads.
 `listMemories()` returns 10 for `saksi_demo`, 6 for `oracle_backtest`, 2 for `testdemo` and
 1 for `demo_buyer`, all with `hasMore: false`. Each `pnpm verify:memory` run writes one more
 `preference` memory, so that count grows by one per run.
@@ -503,18 +516,20 @@ number of surviving journals; `memory_writes` still records the real blob id of 
   buyer who had already paid.
 - The signal catalogue has no provider contract to configure. Sellers write the payload
   themselves, and Saksi stores it verbatim without asserting its accuracy.
-- Sessions are a local, HMAC-signed cookie containing the user UUID. Signing prevents
+- Sessions are a local, HMAC-signed cookie containing the journal ref. Signing prevents
   forgery, but this is still a hackathon identity model rather than production
   authentication (no expiry rotation or revocation list).
-- A journal is resumed with its bound wallet signature, or with its handle plus a 24-symbol
-  recovery code issued once at creation and stored only as a scrypt hash. Losing both means
-  the journal cannot be recovered: `sealed` picks stay sealed forever. Journals created
-  before this existed can be given a code by an operator with
-  `pnpm recovery:issue <handle> <file>`, which is a CLI rather than an endpoint so nobody can
-  mint a code for someone else's handle.
-- Wallet binding is one-way by design: `bindWalletToUser` refuses to rebind an existing
-  `wallet_address`. A hijacked session therefore cannot redirect a seller's income, at the
-  cost of not supporting wallet migration without a new journal.
+- A journal _is_ its Sui address: signing in means proving that wallet with a single-use
+  challenge. A 24-symbol recovery code is issued once at creation and written to a
+  `saksi:recovery:<sha256(code)>` namespace, so it can restore access when the wallet is gone
+  without any database column holding a credential. Losing both means the journal cannot be
+  recovered: `sealed` picks stay sealed forever. Journals created before this existed can be
+  given a code by an operator with `pnpm recovery:issue <wallet> <file>`, which is a CLI
+  rather than an endpoint so nobody can mint a code for someone else's wallet.
+- The handle is a display name, not a claim. Two journals may show the same `@name`; what is
+  unique is the wallet, because the wallet is the ref and cannot be shared without sharing a
+  private key. This was chosen over unique handles because Walrus has no unique constraint,
+  and a check-then-write race on a handle would merge two journals into one namespace.
 - Publishing is open to any journal with a proven wallet and is rate limited to 10 requests
   per minute. Buying a listed signal is open to anyone with a wallet.
 - The in-memory rate limiter is not shared between server instances.

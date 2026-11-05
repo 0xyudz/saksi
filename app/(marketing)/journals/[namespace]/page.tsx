@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 
 import { EmptyState, Hash, PageHeader, StatCard } from "@/components/ui";
 import { recallNamespace } from "@/integrations/walrus-memory/client";
-import { MEMORY_KINDS, parseMemory } from "@/integrations/walrus-memory/schema";
+import { JOURNAL_MEMORY_KINDS, parseMemory } from "@/integrations/walrus-memory/schema";
 import { formatDateTime } from "@/lib/format";
 import { getEnv } from "@/lib/env";
 import { analystsFromJournal, reconstructJournal } from "@/server/scoring/reconstruct";
@@ -28,9 +28,13 @@ export default async function JournalDetailPage({ params, searchParams }: PagePr
   const namespace = decodeURIComponent(raw);
   const prefix = getEnv().WALRUS_MEMORY_NAMESPACE_PREFIX;
 
-  // Only namespaces under this deployment's prefix are exposed, so a hand-typed URL cannot
-  // turn this page into a reader for unrelated relayer tenants.
+  // Only history namespaces under this deployment's prefix are exposed, so a hand-typed URL
+  // cannot turn this page into a reader for unrelated relayer tenants. Identity namespaces
+  // are refused too: they hold one record each and no track record to reconstruct.
   if (!namespace.startsWith(`${prefix}:`)) notFound();
+  if (namespace.startsWith(`${prefix}:wallet:`) || namespace.startsWith(`${prefix}:recovery:`)) {
+    notFound();
+  }
 
   const query = q?.trim() ?? "";
   const journal = await reconstructJournal(namespace);
@@ -92,7 +96,7 @@ export default async function JournalDetailPage({ params, searchParams }: PagePr
         </div>
 
         <div className="mt-6 flex flex-wrap gap-2">
-          {MEMORY_KINDS.map((kind) => {
+          {JOURNAL_MEMORY_KINDS.map((kind) => {
             const present = journal.kinds.includes(kind);
             return (
               <span

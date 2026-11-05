@@ -4,22 +4,25 @@ import postgres from "postgres";
 
 import { userNamespace } from "@/integrations/walrus-memory/client";
 import { UNDERDOG_ODDS_THRESHOLD } from "@/lib/config";
-import { analystsFromJournal, reconstructJournal } from "@/server/scoring/reconstruct";
 import { detectBias } from "@/server/scoring/bias";
+import { analystsFromJournal, reconstructJournal } from "@/server/scoring/reconstruct";
 
 /**
  * Proof that the product can be rebuilt from Walrus Memory.
  *
- * Reads every journal's memories from the relayer, derives credibility and bias from them
+ * Reads each journal's memories from the relayer, derives credibility and bias from them
  * alone, then compares against the same numbers computed from Postgres. The two must agree
  * for the claim "Walrus is the source of truth" to mean anything.
+ *
+ * There is no `users` table any more, so journals are discovered from `picks.journal_ref`.
+ * The Postgres side is therefore only a *witness*: it is the independent record this script
+ * checks the relayer against, not something the app reads to answer the same question.
  *
  * Run: pnpm verify:reconstruct
  */
 
 interface DbRow {
-  readonly handle: string;
-  readonly user_id: string;
+  readonly ref: string;
   readonly analyst_id: string;
   readonly analyst_name: string;
   readonly resolved: number;
@@ -31,35 +34,30 @@ async function main(): Promise<void> {
   const sql = postgres(process.env.DATABASE_URL ?? "");
 
   const rows = await sql<DbRow[]>`
-    select u.handle,
-           u.id::text as user_id,
+    select p.journal_ref as ref,
            a.id::text as analyst_id,
            a.name as analyst_name,
            count(o.id) filter (where o.result <> 'void')::int as resolved,
            count(o.id) filter (where o.result = 'win')::int as wins,
            count(o.id) filter (where o.result = 'loss')::int as losses
-    from users u
-    join picks p on p.user_id = u.id
+    from picks p
     join analysts a on a.id = p.analyst_id
     left join outcomes o on o.pick_id = p.id
-    group by u.handle, u.id, a.id, a.name
-    order by u.handle, a.name
+    group by p.journal_ref, a.id, a.name
+    order by p.journal_ref, a.name
   `;
 
-  const handles = [...new Set(rows.map((row) => row.handle))];
-  process.stdout.write("journals with picks: " + handles.length + "\n\n");
+  const refs = [...new Set(rows.map((row) => row.ref))];
+  process.stdout.write("journals with picks: " + refs.length + "\n\n");
 
   let mismatches = 0;
 
-  for (const handle of handles) {
-    const userId = rows.find((row) => row.handle === handle)?.user_id;
-    if (userId === undefined) continue;
-
-    const namespace = userNamespace(userId);
+  for (const ref of refs) {
+    const namespace = userNamespace(ref);
     const journal = await reconstructJournal(namespace);
     const analysts = analystsFromJournal(journal);
 
-    process.stdout.write("=== " + handle + " ===\n");
+    process.stdout.write("=== " + ref + " ===\n");
     process.stdout.write(
       "  namespace " +
         namespace +
@@ -72,8 +70,7 @@ async function main(): Promise<void> {
         "\n",
     );
 
-    const dbRows = rows.filter((row) => row.handle === handle);
-    for (const dbRow of dbRows) {
+    for (const dbRow of rows.filter((row) => row.ref === ref)) {
       const rebuilt = analysts.find((entry) => entry.analystId === dbRow.analyst_id);
       const rebuiltResolved = rebuilt?.credibility.resolved ?? 0;
       const rebuiltWins = rebuilt?.credibility.wins ?? 0;
@@ -133,15 +130,17 @@ async function main(): Promise<void> {
   }
 
   // Show that bias detection runs on memory data, not on a table.
-  const demoUser = rows.find((row) => row.handle === "saksi_demo");
-  if (demoUser) {
-    const journal = await reconstructJournal(userNamespace(demoUser.user_id));
+  const busiest = refs[0];
+  if (busiest !== undefined) {
+    const journal = await reconstructJournal(userNamespace(busiest));
     const samples = journal.picks
       .filter((pick) => pick.result !== null && pick.odds !== null)
       .map((pick) => ({ odds: pick.odds ?? 0, outcome: pick.result ?? "void" }));
     const patterns = detectBias(samples, UNDERDOG_ODDS_THRESHOLD);
     process.stdout.write(
-      "bias check on saksi_demo from memory alone: " +
+      "bias check on " +
+        busiest +
+        " from memory alone: " +
         samples.length +
         " samples, " +
         patterns.length +

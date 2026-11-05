@@ -50,8 +50,21 @@ MemWal.create({
 | `recall({ query, limit, namespace, sort: "relevance" })` | recommendations, `/memory` search             | return decrypted text plus cosine distance                |
 | `listMemories({ namespace, cursor, limit })`             | `/memory`                                     | count and list memories from the relayer, not Postgres    |
 
-`rememberAndWait()` returns `{ id, job_id, blob_id, owner, namespace }`; Saksi records
-`result.blob_id` and `result.job_id ?? result.id` in `memory_writes`.
+`rememberAndWait()` returns `{ id, job_id, blob_id, owner, namespace }`; Saksi keeps
+`result.blob_id` as the receipt it shows the caller. There is no `memory_writes` table any
+more — the blob id is the record, and the relayer is where it lives.
+
+### Identity namespaces
+
+Two namespace shapes are not journal history and are excluded from `/journals`:
+
+| Namespace                     | Holds                                     | Why the key is safe              |
+| ----------------------------- | ----------------------------------------- | -------------------------------- |
+| `${prefix}:wallet:<address>`  | the journal's ref and display handle      | the address is public anyway     |
+| `${prefix}:recovery:<digest>` | the journal pointer, keyed by code digest | the code has 120 bits of entropy |
+
+`MEMORY_KINDS` therefore includes `journal` and `recovery`, while `JOURNAL_MEMORY_KINDS`
+excludes them so a reader looking at a track record sees picks, not bookkeeping.
 
 ### Deterministic memory text
 
@@ -86,8 +99,9 @@ source-ROI memories are secondary: if they fail, the already-verified outcome st
 the failure is logged. Payment memories are attempted after Tatum verification; a failed
 memory write does not invalidate the on-chain payment, and the error is logged.
 
-The `memory_writes` table is an operator audit trail. It is not used as a substitute for
-`listMemories()` on `/memory`.
+There is no audit table. A successful write returns its blob id, and that id is the receipt:
+the memory itself is the source of truth, so a second local copy of the same fact would only
+be a cache that can disagree with the relayer.
 
 ## Independent result oracle
 
@@ -267,9 +281,9 @@ never holds either. `signals.listing_fee_digest` is unique, so one fee publishes
 listing and cannot be replayed.
 
 The seller records a purchase already attributed when the paid request carries a journal
-session (`userId` + optional `pickId`). A script-only purchase leaves `userId` null; that
-row can be claimed later by digest, which keeps `payments.digest` unique and makes retries
-idempotent.
+session (`journalRef` + optional `pickId`). A script-only purchase leaves `journal_ref` null;
+that row can be claimed later by digest, which keeps `payments.digest` unique and makes
+retries idempotent.
 
 ### Buyer
 
@@ -337,19 +351,21 @@ command and copying its output; nothing here is estimated. A Walrus write return
 id on every run and Tatum's checkpoint advances continuously, so those two values are the
 ones recorded at the time of writing rather than constants.
 
-| Area                     | Result                                                                                                                         | Command              |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------ | -------------------- |
-| Walrus Memory relayer    | `status: ok`, relayer `0.1.0`                                                                                                  | `pnpm verify:memory` |
-| Walrus write + recall    | blob `tO58wlvK_zeGbWMS9sWf284bMr9c_Y2uuQQsj20kKMw`, cosine distance `0.35998293954418614`, exact text returned                 | `pnpm verify:memory` |
-| `listMemories()`         | 10 memories for `saksi_demo`, `hasMore: false` (one is added per verification run)                                             | `pnpm verify:memory` |
-| Mainnet memories written | 38 rows across `pick_commit` 12, `pick_reveal` 8, `outcome` 8, `preference` 8, `payment` 1, `source_roi` 1                     | `memory_writes`      |
-| Tatum checkpoint         | `341329560` (advances; any recent value proves the query)                                                                      | `pnpm verify:tatum`  |
-| Tatum transaction        | `DemaKkYM7Ni4mRJcxbth3e4h3BkkqgKnR1MYPdWhmgjq`, status `success`, 2 balance changes                                            | `pnpm verify:tatum`  |
-| Tatum balance            | operator agent `0` atomic USDC; merchant `10000` after settlement                                                              | `pnpm verify:tatum`  |
-| x402 settlement          | one real $0.01 USDC purchase, paid by a self-custody browser wallet and verified through Tatum before the payload was released | browser + `payments` |
-| Oracle fixtures          | 8 completed `eng.1` fixtures on 2026-10-31, each resolving to exactly one winner, including two draws                          | `pnpm verify:oracle` |
-| Oracle agreement         | "Chelsea to win" on `espn:eng.1:401879248` (Chelsea 2-0 Man Utd) stored as `oracle_verified`                                   | `outcomes`           |
-| Oracle contradiction     | a claimed win on a fixture the provider made a loss stored as `oracle_contradicted`, owner's claim preserved                   | `outcomes`           |
+| Area                  | Result                                                                                                                         | Command                   |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------- |
+| Walrus Memory relayer | `status: ok`, relayer `0.1.0`                                                                                                  | `pnpm verify:memory`      |
+| Walrus write + recall | blob `KWpogiSiqOxBOD8x5Z72QCnh_Nnfd7aYHE-tEfjojcM`, cosine distance `0.3566046999066741`, exact text returned                  | `pnpm verify:memory`      |
+| `listMemories()`      | 12 memories for `saksi_demo`, `hasMore: false` (one is added per verification run)                                             | `pnpm verify:memory`      |
+| Mainnet namespaces    | 18 under `saksi:`, holding 49 memories: 43 across 13 journal namespaces, 2 identity records, 4 verification probes             | `listNamespaces()`        |
+| Identity from Walrus  | wallet `0xe47cc1da…` → `@saksi_dev` in 5939 ms; unknown wallet → no journal in 390 ms, no SQL involved                         | `readJournalRecord()`     |
+| Reconstruction        | `mismatches: 0` — credibility rebuilt from memory agrees with Postgres for every analyst                                       | `pnpm verify:reconstruct` |
+| Tatum checkpoint      | `341329560` (advances; any recent value proves the query)                                                                      | `pnpm verify:tatum`       |
+| Tatum transaction     | `DemaKkYM7Ni4mRJcxbth3e4h3BkkqgKnR1MYPdWhmgjq`, status `success`, 2 balance changes                                            | `pnpm verify:tatum`       |
+| Tatum balance         | operator agent `0` atomic USDC; merchant `10000` after settlement                                                              | `pnpm verify:tatum`       |
+| x402 settlement       | one real $0.01 USDC purchase, paid by a self-custody browser wallet and verified through Tatum before the payload was released | browser + `payments`      |
+| Oracle fixtures       | 8 completed `eng.1` fixtures on 2026-10-31, each resolving to exactly one winner, including two draws                          | `pnpm verify:oracle`      |
+| Oracle agreement      | "Chelsea to win" on `espn:eng.1:401879248` (Chelsea 2-0 Man Utd) stored as `oracle_verified`                                   | `outcomes`                |
+| Oracle contradiction  | a claimed win on a fixture the provider made a loss stored as `oracle_contradicted`, owner's claim preserved                   | `outcomes`                |
 
 ## Still unverified
 

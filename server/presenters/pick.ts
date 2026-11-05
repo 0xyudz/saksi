@@ -21,7 +21,8 @@ export interface PresentableOutcome {
 
 export interface PresentablePick {
   readonly id: string;
-  readonly userId: string;
+  /** The owning journal: a Sui address, or a legacy uuid. */
+  readonly journalRef: string;
   readonly status: PickStatus;
   readonly eventRef: string;
   readonly market: string;
@@ -84,7 +85,7 @@ export function presentPick(input: {
   readonly now?: Date;
 }): PickView {
   const { pick } = input;
-  const isOwner = input.viewerId === pick.userId;
+  const isOwner = input.viewerId === pick.journalRef;
   const sealed = pick.status === "sealed";
   const visible = isOwner || !sealed;
   const now = input.now ?? new Date();

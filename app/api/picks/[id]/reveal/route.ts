@@ -3,6 +3,7 @@ import { z } from "zod";
 import { AppError } from "@/lib/errors";
 import { assertSessionOrigin, handleRoute, jsonResponse } from "@/lib/http";
 import { requireApiUserId } from "@/server/auth";
+import { labelForOne } from "@/server/data/journal";
 import { getPickDetail } from "@/server/data/picks";
 import { presentPick } from "@/server/presenters/pick";
 import { revealPick } from "@/server/usecases/reveal-pick";
@@ -34,7 +35,7 @@ export async function POST(
         pick: presentPick({
           pick: detail.pick,
           viewerId: userId,
-          ownerHandle: detail.ownerHandle,
+          ownerHandle: await labelForOne(detail.ownerRef),
           analystName: detail.analystName,
           analystKind: detail.analystKind,
           outcome:

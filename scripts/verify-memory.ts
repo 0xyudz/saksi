@@ -1,55 +1,75 @@
 import { randomUUID } from "node:crypto";
 
-import { sql } from "drizzle-orm";
-
 import "./load-env";
 
-import { closeDb, getDb } from "@/db/client";
-import { users } from "@/db/schema";
-import { buildPreferenceMemory } from "@/integrations/walrus-memory/schema";
 import {
   health,
   listMemories,
+  listNamespaces,
   recall,
   remember,
   userNamespace,
 } from "@/integrations/walrus-memory/client";
+import { buildPreferenceMemory } from "@/integrations/walrus-memory/schema";
+import { getEnv } from "@/lib/env";
+import { isWalletRef } from "@/lib/journal-identity";
 
+/**
+ * End-to-end check of Walrus Memory: write, recall, list.
+ *
+ * It writes a real memory, so it needs a real journal ref to write into. Pass one as the
+ * first argument — a Sui address, or a legacy uuid. Without an argument it picks the busiest
+ * namespace under this deployment's prefix, so the check still runs against real data
+ * instead of a mock.
+ *
+ * Usage: pnpm verify:memory [<wallet-or-ref>]
+ */
 function output(value: Record<string, unknown>): void {
   process.stdout.write(`${JSON.stringify(value)}\n`);
+}
+
+async function resolveRef(): Promise<{ ref: string; source: string }> {
+  const explicit = process.argv[2];
+  if (explicit !== undefined && explicit.length > 0) {
+    return { ref: explicit, source: "argument" };
+  }
+
+  const prefix = getEnv().WALRUS_MEMORY_NAMESPACE_PREFIX;
+  const namespaces = await listNamespaces();
+  const mine = namespaces
+    .filter((entry) => entry.name.startsWith(`${prefix}:`) && !entry.name.includes(":probe:"))
+    .sort((a, b) => b.memoryCount - a.memoryCount);
+
+  const busiest = mine[0];
+  if (!busiest) {
+    throw new Error(
+      "No namespace under this prefix. Create a journal at /onboarding, or pass a ref explicitly.",
+    );
+  }
+  return { ref: busiest.name.slice(prefix.length + 1), source: "busiest namespace" };
 }
 
 async function main(): Promise<void> {
   const runtime = await health();
   output({ step: "health", status: runtime.status, version: runtime.version });
 
-  const rows = await getDb()
-    .select({ id: users.id, handle: users.handle })
-    .from(users)
-    .orderBy(sql`case when ${users.handle} = 'saksi_demo' then 0 else 1 end`)
-    .limit(1);
-  const user = rows[0];
-  if (!user) {
-    throw new Error(
-      "No journal user exists. Create one at /onboarding so verification can write to a real namespace.",
-    );
-  }
+  const { ref, source } = await resolveRef();
+  output({ step: "ref", ref, source, namespace: userNamespace(ref), wallet: isWalletRef(ref) });
 
   const marker = `verify-memory ${new Date().toISOString()} ${randomUUID()}`;
   const memory = buildPreferenceMemory({
-    userId: user.id,
+    userId: ref,
     statement: `Verification probe: ${marker}`,
   });
-  const wrote = await remember(user.id, memory);
+  const wrote = await remember(ref, memory);
   output({
     step: "rememberAndWait",
-    handle: user.handle,
-    namespace: userNamespace(user.id),
+    namespace: wrote.namespace,
     blobId: wrote.blobId,
     jobId: wrote.jobId,
   });
 
-  const recalled = await recall(user.id, marker);
+  const recalled = await recall(ref, marker);
   const hit = recalled.hits.find((candidate) => candidate.citation.text === memory.text);
   if (!hit) {
     throw new Error("The freshly written memory was not returned by recall().");
@@ -61,10 +81,9 @@ async function main(): Promise<void> {
     text: hit.citation.text,
   });
 
-  const ledger = await listMemories(user.id);
+  const ledger = await listMemories(ref);
   output({
     step: "listMemories",
-    handle: user.handle,
     fetched: ledger.fetched,
     hasMore: ledger.hasMore,
     truncated: ledger.truncated,
@@ -87,7 +106,4 @@ main()
       })}\n`,
     );
     process.exitCode = 1;
-  })
-  .finally(async () => {
-    await closeDb();
   });

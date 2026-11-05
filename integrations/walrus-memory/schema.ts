@@ -15,6 +15,8 @@ import { MEMORY_FORMAT_PREFIX } from "@/lib/config";
  */
 
 export const MEMORY_KINDS = [
+  "journal",
+  "recovery",
   "pick",
   "pick_commit",
   "pick_reveal",
@@ -24,6 +26,17 @@ export const MEMORY_KINDS = [
   "preference",
   "payment",
 ] as const;
+
+/**
+ * Kinds that belong to a journal's own history, as opposed to identity plumbing.
+ *
+ * `journal` and `recovery` are keyed by wallet and by code digest respectively, so they live
+ * in their own namespaces and are never part of a reconstructed track record. The UI lists
+ * the history kinds, because a reader looking at a journal wants picks, not bookkeeping.
+ */
+export const JOURNAL_MEMORY_KINDS = MEMORY_KINDS.filter(
+  (kind) => kind !== "journal" && kind !== "recovery",
+);
 
 export type MemoryKind = (typeof MEMORY_KINDS)[number];
 
@@ -96,7 +109,31 @@ const paymentSchema = z.strictObject({
   network: caip2,
 });
 
+/**
+ * The journal's own identity record.
+ *
+ * This is the only place a handle is stored. It is a display name: `ref` is what identifies
+ * the journal, and `wallet` is the address that can sign for it. Two journals may hold the
+ * same handle without conflict, which is exactly why a handle can no longer be a key.
+ */
+const journalSchema = z.strictObject({
+  ref: z.string().min(1).max(80),
+  wallet: z.string().regex(/^0x[0-9a-f]{64}$/, "expected a normalised Sui address"),
+  handle: z.string().regex(/^[a-z0-9_]{3,24}$/, "expected a handle-shaped name"),
+  createdAt: isoDate,
+});
+
+/** Points a recovery-code digest at the journal it unlocks, without a table. */
+const recoverySchema = z.strictObject({
+  ref: z.string().min(1).max(80),
+  wallet: z.string().regex(/^0x[0-9a-f]{64}$/, "expected a normalised Sui address"),
+  handle: z.string().regex(/^[a-z0-9_]{3,24}$/, "expected a handle-shaped name"),
+  createdAt: isoDate,
+});
+
 type ParsedBase =
+  | ({ readonly kind: "journal" } & z.infer<typeof journalSchema>)
+  | ({ readonly kind: "recovery" } & z.infer<typeof recoverySchema>)
   | ({ readonly kind: "pick" } & z.infer<typeof pickSchema>)
   | ({ readonly kind: "pick_commit" } & z.infer<typeof pickCommitSchema>)
   | ({ readonly kind: "pick_reveal" } & z.infer<typeof pickRevealSchema>)
@@ -167,6 +204,14 @@ export function parseMemory(text: string): ParsedMemory | null {
 
 function parseFields(kind: MemoryKind, fields: Record<string, string>): ParsedBase | null {
   switch (kind) {
+    case "journal": {
+      const result = journalSchema.safeParse(fields);
+      return result.success ? { kind: "journal", ...result.data } : null;
+    }
+    case "recovery": {
+      const result = recoverySchema.safeParse(fields);
+      return result.success ? { kind: "recovery", ...result.data } : null;
+    }
     case "pick": {
       const result = pickSchema.safeParse(fields);
       return result.success ? { kind: "pick", ...result.data } : null;
@@ -210,6 +255,24 @@ export function isMemoryKind(value: string): value is MemoryKind {
 
 export function memoryKind(text: string): MemoryKind | null {
   return parseMemory(text)?.kind ?? null;
+}
+
+export function buildJournalMemory(input: z.infer<typeof journalSchema>): BuiltMemory {
+  return assemble("journal", [
+    ["ref", input.ref],
+    ["wallet", input.wallet],
+    ["handle", input.handle],
+    ["createdAt", input.createdAt],
+  ]);
+}
+
+export function buildRecoveryMemory(input: z.infer<typeof recoverySchema>): BuiltMemory {
+  return assemble("recovery", [
+    ["ref", input.ref],
+    ["wallet", input.wallet],
+    ["handle", input.handle],
+    ["createdAt", input.createdAt],
+  ]);
 }
 
 /** Legacy builder kept only so old test fixtures can round-trip. Runtime never writes it. */
@@ -290,6 +353,6 @@ export function buildPaymentMemory(input: z.infer<typeof paymentSchema>): BuiltM
   ]);
 }
 
-export function namespaceFor(prefix: string, userId: string): string {
-  return `${prefix}:${userId}`;
+export function namespaceFor(prefix: string, ref: string): string {
+  return `${prefix}:${ref}`;
 }

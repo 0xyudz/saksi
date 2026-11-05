@@ -45,7 +45,9 @@ export default async function SignalsPage() {
                 >
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <span className="badge badge-sealed">
-                      {item.sellerHandle ?? item.signal.provider}
+                      {item.sellerWallet === null
+                        ? item.signal.provider
+                        : `${item.sellerWallet.slice(0, 6)}…${item.sellerWallet.slice(-4)}`}
                     </span>
                     <span className="mono text-muted text-[10px]">
                       {formatDateTime(item.signal.createdAt)}

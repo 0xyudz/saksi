@@ -29,31 +29,19 @@ export const outcomeVerificationEnum = pgEnum("outcome_verification", [
   "oracle_contradicted",
 ]);
 
-export const users = pgTable(
-  "users",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    handle: text("handle").notNull(),
-    /**
-     * scrypt hash of the recovery code shown once at journal creation. Null for journals
-     * created before recovery existed; those cannot be resumed.
-     */
-    recoveryHash: text("recovery_hash"),
-    /**
-     * Sui address proven to belong to this journal through a signed personal message.
-     * Unique: one wallet can only ever claim one handle. Null means the journal has not
-     * bound a wallet yet, and therefore cannot sell signals.
-     */
-    walletAddress: text("wallet_address"),
-    /** When the wallet binding was proven. Kept for audit, not used for authorisation. */
-    walletBoundAt: timestamp("wallet_bound_at", { withTimezone: true, mode: "date" }),
-    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
-  },
-  (table) => [
-    uniqueIndex("users_handle_unique").on(table.handle),
-    uniqueIndex("users_wallet_unique").on(table.walletAddress),
-  ],
-);
+/*
+ * There is no `users` table.
+ *
+ * A journal is identified by the Sui address that proved ownership of it, so the identity
+ * is self-certifying and needs no row to exist. Every table that used to hold a `user_id`
+ * foreign key now holds a `journal_ref`: a lowercase Sui address, or — for journals created
+ * before this change — the uuid they were known by. Both forms are accepted because Walrus
+ * is append-only: old memories live in `saksi:<uuid>` and cannot be moved, so the old ref
+ * has to stay resolvable rather than be rewritten.
+ *
+ * The handle survives as a display name stored in Walrus Memory, not as a key. Two journals
+ * may share one, because nothing authorises on it any more.
+ */
 
 /**
  * Single-use challenges for wallet binding. Stored in Postgres rather than memory because
@@ -108,9 +96,12 @@ export const picks = pgTable(
   "picks",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    userId: uuid("user_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
+    /**
+     * The journal that owns this pick: a Sui address, or a legacy uuid. Deliberately a
+     * plain column rather than a foreign key, because there is no journal table to point
+     * at — the wallet is the identity and it is proven by signature, not by a row.
+     */
+    journalRef: text("journal_ref").notNull(),
     analystId: uuid("analyst_id")
       .notNull()
       .references(() => analysts.id, { onDelete: "restrict" }),
@@ -133,7 +124,7 @@ export const picks = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
   },
   (table) => [
-    index("picks_user_idx").on(table.userId),
+    index("picks_journal_idx").on(table.journalRef),
     index("picks_analyst_idx").on(table.analystId),
     index("picks_status_idx").on(table.status),
   ],
@@ -186,10 +177,10 @@ export const signals = pgTable(
     priceAtomic: bigint("price_atomic", { mode: "bigint" }).notNull(),
     asset: text("asset").notNull(),
     /**
-     * The journal that listed this signal. Null for catalogue rows created before selling
-     * existed; those are paid to the platform address.
+     * The journal that listed this signal: a Sui address or legacy uuid. Null for
+     * catalogue rows created before selling existed; those are paid to the platform.
      */
-    sellerId: uuid("seller_id").references(() => users.id, { onDelete: "set null" }),
+    sellerRef: text("seller_ref"),
     /**
      * Where x402 sends the buyer's payment for this signal. Copied from the seller's
      * proven wallet at listing time so a later wallet change cannot redirect a live
@@ -208,7 +199,7 @@ export const signals = pgTable(
   },
   (table) => [
     index("signals_provider_idx").on(table.provider),
-    index("signals_seller_idx").on(table.sellerId),
+    index("signals_seller_idx").on(table.sellerRef),
     uniqueIndex("signals_provider_external_unique").on(table.provider, table.externalRef),
     uniqueIndex("signals_listing_fee_unique").on(table.listingFeeDigest),
   ],
@@ -218,7 +209,11 @@ export const payments = pgTable(
   "payments",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+    /**
+     * The journal that bought this signal, when known. A settlement can be recorded before
+     * any journal claims it, so this is nullable and filled in later by digest.
+     */
+    journalRef: text("journal_ref"),
     pickId: uuid("pick_id").references(() => picks.id, { onDelete: "set null" }),
     signalId: uuid("signal_id")
       .notNull()
@@ -256,7 +251,6 @@ export const recommendations = pgTable(
   (table) => [index("recommendations_created_idx").on(table.createdAt)],
 );
 
-export type UserRow = typeof users.$inferSelect;
 export type WalletChallengeRow = typeof walletChallenges.$inferSelect;
 export type AnalystRow = typeof analysts.$inferSelect;
 export type PickRow = typeof picks.$inferSelect;

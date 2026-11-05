@@ -100,7 +100,7 @@ export async function publishSignal(
     throw new AppError("CONFLICT", "That listing fee has already published a signal.");
   }
 
-  if (await sellerHasExternalRef(seller.userId, seller.handle, input.externalRef)) {
+  if (await sellerHasExternalRef(seller.userId, input.externalRef)) {
     throw new AppError("CONFLICT", "You already listed a signal with that reference.");
   }
 
@@ -112,7 +112,7 @@ export async function publishSignal(
   });
 
   const created = await insertListing({
-    sellerId: seller.userId,
+    sellerRef: seller.userId,
     payToAddress: seller.walletAddress,
     externalRef: input.externalRef,
     provider: seller.handle,
@@ -123,7 +123,6 @@ export async function publishSignal(
     listingFeeDigest: input.digest,
     listingFeeAtomic: verified.payment.amountAtomic,
   });
-
   if (!created) {
     // A concurrent request won the unique constraint on the fee digest or the reference.
     throw new AppError("CONFLICT", "That listing was already published.");
@@ -132,7 +131,7 @@ export async function publishSignal(
   getLogger().info(
     {
       signalId: created.id,
-      sellerId: seller.userId,
+      sellerRef: seller.userId,
       listingFeeDigest: input.digest,
       listingFeeAtomic: verified.payment.amountAtomic.toString(),
     },
@@ -163,7 +162,7 @@ export async function recoverListing(
 
   const existing = await findListingByFeeDigest(input.digest);
   if (existing) {
-    if (existing.sellerId !== seller.userId) {
+    if (existing.sellerRef !== seller.userId) {
       throw new AppError("CONFLICT", "That listing fee belongs to another journal.");
     }
     return {
@@ -175,7 +174,7 @@ export async function recoverListing(
     };
   }
 
-  if (await sellerHasExternalRef(seller.userId, seller.handle, input.externalRef)) {
+  if (await sellerHasExternalRef(seller.userId, input.externalRef)) {
     throw new AppError("CONFLICT", "You already listed a signal with that reference.");
   }
 
@@ -189,7 +188,7 @@ export async function recoverListing(
   });
 
   const created = await insertListing({
-    sellerId: seller.userId,
+    sellerRef: seller.userId,
     payToAddress: seller.walletAddress,
     externalRef: input.externalRef,
     provider: seller.handle,
@@ -203,7 +202,7 @@ export async function recoverListing(
 
   if (!created) {
     const raced = await findListingByFeeDigest(input.digest);
-    if (raced && raced.sellerId === seller.userId) {
+    if (raced && raced.sellerRef === seller.userId) {
       return {
         signal: raced,
         listingFeeDigest: input.digest,
@@ -218,7 +217,7 @@ export async function recoverListing(
   getLogger().info(
     {
       signalId: created.id,
-      sellerId: seller.userId,
+      sellerRef: seller.userId,
       listingFeeDigest: input.digest,
       listingFeeAtomic: verified.payment.amountAtomic.toString(),
     },

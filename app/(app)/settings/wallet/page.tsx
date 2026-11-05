@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
 
-import { BindWalletPanel } from "@/components/forms/BindWalletPanel";
 import { PageHeader } from "@/components/ui";
 import { getSessionUser } from "@/lib/session";
 
@@ -15,37 +14,29 @@ export default async function WalletSettingsPage() {
     <div>
       <PageHeader
         eyebrow="Identity"
-        title="Your payout wallet."
-        description="Saksi never holds your money. A proven wallet is where buyers send payment when they unlock a signal you published, so the address must be one you control."
+        title="This journal is a wallet."
+        description="There is no account to manage and no address to attach. The wallet you signed with is the journal, which is why Saksi never holds your money and cannot move it."
       />
 
       <div className="container-page grid gap-8 pb-20 lg:grid-cols-[1.1fr_0.9fr]">
         <section className="card p-6 sm:p-8">
-          <p className="mono text-muted text-[10px] tracking-[0.18em] uppercase">
-            {user.walletAddress === null ? "Not bound yet" : "Bound"}
-          </p>
+          <p className="mono text-muted text-[10px] tracking-[0.18em] uppercase">Proven wallet</p>
           <h2 className="display mt-2 text-2xl">@{user.handle}</h2>
 
-          {user.walletAddress === null ? (
-            <>
-              <p className="text-muted mt-3 mb-6 text-xs leading-relaxed">
-                This journal was created before wallet auth existed, so it has no payout address
-                yet. Binding needs one signature and costs nothing.
-              </p>
-              <BindWalletPanel />
-            </>
-          ) : (
-            <div className="mt-4 space-y-3">
-              <p className="border-green/30 bg-green/5 text-green mono rounded-xl border px-3 py-2 text-[11px] break-all">
-                {user.walletAddress}
-              </p>
-              <p className="text-muted text-xs leading-relaxed">
-                Buyers pay this address directly through x402. Binding is one-way: a journal cannot
-                repoint its wallet, because a hijacked session must not be able to redirect a
-                seller&apos;s income.
-              </p>
-            </div>
-          )}
+          <div className="mt-4 space-y-3">
+            <p className="border-green/30 bg-green/5 text-green mono rounded-xl border px-3 py-2 text-[11px] break-all">
+              {user.walletAddress ?? "This journal predates wallet identity."}
+            </p>
+            <p className="text-muted text-xs leading-relaxed">
+              Buyers pay this address directly through x402. There is nothing to rebind: changing
+              where the money goes would mean signing in with a different wallet, which is a
+              different journal.
+            </p>
+            <p className="text-muted text-xs leading-relaxed">
+              Because the address is the identity, two journals cannot share one. That is the
+              opposite of your handle, which is only a display name and may be shared.
+            </p>
+          </div>
         </section>
 
         <aside className="card p-6">

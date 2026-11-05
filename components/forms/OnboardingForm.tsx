@@ -192,8 +192,8 @@ export function OnboardingForm() {
           />
         </div>
         <p className="text-muted mt-2 text-xs leading-relaxed">
-          Lowercase letters, numbers and underscores. One wallet claims one handle, and the handle
-          is written into your memories.
+          Lowercase letters, numbers and underscores. This is a display name, not a claim: your
+          wallet is what identifies the journal, so the same handle can be used by another journal.
         </p>
       </div>
 

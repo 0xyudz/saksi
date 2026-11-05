@@ -9,6 +9,7 @@ import { errorForLog, getLogger } from "@/lib/logger";
 import { formatAtomic, formatUsd } from "@/lib/price";
 import { getSessionUser } from "@/lib/session";
 import { eventsForDigests, type OnChainEvent } from "@/server/data/chain";
+import { labelForRef, readJournalHandles } from "@/server/data/journal";
 import { listRecentPayments, listRecentRecommendations } from "@/server/data/lifecycle";
 import { listingsForSeller, sellerSummary } from "@/server/data/listings";
 import { leaderboard, pickStats, recentPicks, verificationStatsForUser } from "@/server/data/picks";
@@ -72,11 +73,12 @@ export default async function DashboardPage() {
 
   const top = board[0];
   const latestDecision = recommendations[0];
+  const handles = await readJournalHandles(feed.map((item) => item.journalRef));
   const picks = feed.map((item) =>
     presentPick({
       pick: item.pick,
       viewerId: user?.id,
-      ownerHandle: item.userHandle,
+      ownerHandle: labelForRef(item.journalRef, handles),
       analystName: item.analystName,
       analystKind: item.analystKind,
       outcome:

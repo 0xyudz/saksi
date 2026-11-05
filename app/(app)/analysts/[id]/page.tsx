@@ -180,7 +180,7 @@ export default async function AnalystDetailPage({ params }: { params: Promise<{ 
             ) : (
               <div className="mt-4 space-y-3">
                 {picks.slice(0, 8).map((pick) => {
-                  const sealed = pick.status === "sealed" && pick.userId !== user?.id;
+                  const sealed = pick.status === "sealed" && pick.journalRef !== user?.id;
                   return (
                     <Link
                       key={pick.id}
