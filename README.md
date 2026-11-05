@@ -25,7 +25,7 @@ Built for **Total Recall — Tatum × Walrus Memory** (Track 1: Markets & Sports
 | x402 on Sui mainnet                   | verified — one real $0.01 USDC settlement, verified by Tatum and recorded    |
 | Oracle verification                   | verified — `site.api.espn.com` returns completed scores for `eng.1` fixtures |
 | Full user journey                     | verified — claim, seal, reveal, resolve, recommend and the 402 paywall       |
-| Deployed instance                     | no — the app runs locally at `http://localhost:3000`                         |
+| Deployed instance                     | yes — <https://saksi-psi.vercel.app> (Vercel, region `sin1`)                 |
 
 Every value in [Proof](#proof) was produced by the command named beside it against Sui
 mainnet on 2 Nov 2026, and nothing there is estimated. The settlement in that table came
@@ -99,7 +99,8 @@ pnpm dev
 
 Open `http://localhost:3000` for the landing page, `/how-it-works` for the short
 explanation, and `/docs` for the documents in this repository. Create a journal at
-`/onboarding`, then visit `/picks/new`.
+`/onboarding`, then visit `/picks/new`. The deployed instance is
+<https://saksi-psi.vercel.app> and behaves identically; only `APP_BASE_URL` differs.
 
 > `pnpm build` does not need production credentials. Every runtime entry point validates
 > them through `instrumentation.ts` and fails fast when a required value is missing.
