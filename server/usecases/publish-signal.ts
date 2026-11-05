@@ -37,6 +37,30 @@ const priceAtomicSchema = z
     message: "price must not exceed 100 USDC",
   });
 
+/**
+ * Checks that a listing can break even.
+ *
+ * The schema only enforces the Sui gasless minimum (10000 atomic), which is *below* the flat
+ * listing fee (20000 atomic). A listing priced at the minimum therefore costs the seller more
+ * to publish than it can ever return. The fee is not a percentage, so this is a simple
+ * comparison rather than a margin calculation, and it belongs here rather than in the schema
+ * because the fee is configuration, not a constant.
+ *
+ * Kept pure so the rule is unit tested without a database or a relayer.
+ */
+export function listingPriceProblem(
+  priceAtomic: bigint,
+  listingFee: bigint,
+): { path: string; message: string } | null {
+  if (priceAtomic >= listingFee) return null;
+  return {
+    path: "priceAtomic",
+    message:
+      `price must be at least the listing fee (${listingFee.toString()} atomic), ` +
+      "otherwise a single sale can never recover what listing it cost.",
+  };
+}
+
 export const publishSignalSchema = z.object({
   /** What the buyer sees in the catalogue. */
   title: z.string().trim().min(4).max(200),
@@ -95,6 +119,18 @@ export async function publishSignal(
 ): Promise<PublishedSignal> {
   const env = getEnv();
   const listingFee = listingFeeAtomic(env);
+
+  /**
+   * A price below the listing fee means the seller cannot break even on a single sale. The
+   * schema cannot catch it: it only enforces the Sui gasless minimum (10000), which is lower
+   * than the fee (20000). Rejecting it here keeps a seller from publishing a listing that is
+   * guaranteed to lose money, and keeps the catalogue from advertising a price that makes no
+   * economic sense.
+   */
+  const priceProblem = listingPriceProblem(input.priceAtomic, listingFee);
+  if (priceProblem !== null) {
+    throw new AppError("VALIDATION_FAILED", priceProblem.message, { details: [priceProblem] });
+  }
 
   if (await listingFeeUsed(input.digest)) {
     throw new AppError("CONFLICT", "That listing fee has already published a signal.");

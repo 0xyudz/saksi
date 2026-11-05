@@ -1229,6 +1229,26 @@ the flat listing fee. The one catalogue payload kept for testing is labelled **s
 demo payload** in the payload itself and everywhere it appears, and is never presented as a
 real forecast.
 
+### The listing floor is the fee, not the gasless minimum
+
+`priceAtomic` is validated twice, and the two bounds are different on purpose:
+
+| Bound                  | Value                  | Enforced by                     |
+| ---------------------- | ---------------------- | ------------------------------- |
+| Sui gasless minimum    | `10000` atomic ($0.01) | `priceAtomicSchema`, a constant |
+| Break-even against fee | `20000` atomic ($0.02) | `listingPriceProblem()`, config |
+
+The schema bound is a network constraint: below `10000` a sponsored settlement is rejected,
+so the buyer could never pay. The second bound is economics: the listing fee is flat, so a
+listing priced at `10000` costs more to publish than one sale returns. The schema cannot
+express it because the fee is configuration (`X402_LISTING_FEE`), not a constant, so the rule
+lives in `publishSignal()` and is a pure function (`listingPriceProblem`) for testability.
+
+This was found by inspecting the live catalogue: listing `426fb368-…` is priced at `10000`
+and was published under the old rule, so it is exactly the case the new check refuses. It
+stays readable because rows are not rewritten, but no new listing can be created in that
+state.
+
 ---
 
 ## 14. Testing strategy
@@ -1309,6 +1329,7 @@ gates are documented in the README Status table and were all run before submissi
 | Listing price below the gasless floor        | Startup refuses the configuration                                       | exit 1    |
 | Publish from a legacy uuid journal           | Refused; it has no wallet to be paid at                                 | 403       |
 | Invalid listing body                         | Rejected before settlement; no listing fee is taken                     | 400       |
+| Listing priced below the listing fee         | Refused before settlement; a single sale could never break even         | 400       |
 | Login proof names another address            | Refused before the lookup                                               | 401       |
 | Claim a wallet that already has a journal    | Refused; sign in instead, so history cannot split across two namespaces | 409       |
 | Oracle contradicts a claimed win             | Stored as `oracle_contradicted`, owner's claim preserved                | 201       |

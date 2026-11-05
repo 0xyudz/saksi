@@ -16,7 +16,7 @@ Built for **Total Recall — Tatum × Walrus Memory** (Track 1: Markets & Sports
 | ------------------------------------- | ---------------------------------------------------------------------------- |
 | `pnpm typecheck`                      | passes                                                                       |
 | `pnpm lint`                           | passes                                                                       |
-| `pnpm test`                           | 166 tests pass across 19 files                                               |
+| `pnpm test`                           | 170 tests pass across 19 files                                               |
 | `pnpm build`                          | passes (Next.js 16.4.3, Turbopack)                                           |
 | Migrations applied to a live database | yes — 7 tables on a live Postgres instance (`0000`–`0007`)                   |
 | Walrus Memory (mainnet relayer)       | verified — `pnpm verify:memory` writes, recalls and lists real blobs         |
@@ -162,6 +162,12 @@ command (`coin::take`, `coin::from_balance`, `TransferObjects`) is rejected as a
 unsupported function in gasless transactions. The fee is therefore charged on the publish
 step instead of being carved out of the sale.
 
+Because the fee is flat, a listing must be priced at least as high as the fee or a single
+sale can never recover it. `publishSignal()` enforces that against the configured fee and
+answers `400` before any settlement. The schema's own floor is lower (`10000`, the Sui
+gasless minimum) because that is a network constraint, not an economic one; the two bounds
+are deliberately separate.
+
 ## Deploying to Vercel
 
 `vercel.json` pins the function region to `sin1` because the live Postgres instance runs in
@@ -187,7 +193,11 @@ Serverless caveats that the local run does not have:
   settlement retry. A shorter platform limit would cut that retry short.
 - Settlement `resource.url` values recorded before the first deploy point at
   `http://localhost:3000`. They remain valid receipts for those payments, but new
-  settlements should be recorded after `APP_BASE_URL` is correct.
+  settlements are recorded against `APP_BASE_URL`.
+- One `outcomes.source_url` was written before the first deploy and pointed at localhost. The
+  Postgres row now points at the public journal page, but the Walrus memory that recorded the
+  original resolution is append-only and still holds the old URL. The two disagree on that
+  field, and no rewrite is possible.
 
 A step-by-step checklist with the full variable list lives in
 [docs/DEPLOY.md](docs/DEPLOY.md).
