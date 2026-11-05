@@ -3,6 +3,7 @@ import Link from "next/link";
 import { PickCard } from "@/components/PickCard";
 import { EmptyState, PageHeader } from "@/components/ui";
 import { getSessionUser } from "@/lib/session";
+import { labelForRef, readJournalHandles } from "@/server/data/journal";
 import { recentPicks } from "@/server/data/picks";
 import { presentPick } from "@/server/presenters/pick";
 
@@ -18,12 +19,13 @@ export default async function PicksPage({
   const user = await getSessionUser();
   const mine = params.mine === "true" && user !== null;
   const feed = await recentPicks(100, mine ? user.id : undefined);
+  const handles = await readJournalHandles(feed.map((item) => item.journalRef));
 
   const picks = feed.map((item) =>
     presentPick({
       pick: item.pick,
       viewerId: user?.id,
-      ownerHandle: item.userHandle,
+      ownerHandle: labelForRef(item.journalRef, handles),
       analystName: item.analystName,
       analystKind: item.analystKind,
       outcome:

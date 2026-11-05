@@ -14,6 +14,7 @@ import {
 import { formatDate, formatDateTime, formatOdds, formatPercent } from "@/lib/format";
 import { isUuid } from "@/lib/ids";
 import { getSessionUser } from "@/lib/session";
+import { labelForOne } from "@/server/data/journal";
 import { getPickDetail } from "@/server/data/picks";
 import { presentPick } from "@/server/presenters/pick";
 import { verifyCommitment } from "@/server/scoring/commitment";
@@ -34,10 +35,11 @@ export default async function PickDetailPage({ params }: { params: Promise<{ id:
   if (!detail) notFound();
 
   const user = await getSessionUser();
+  const ownerHandle = await labelForOne(detail.ownerRef);
   const view = presentPick({
     pick: detail.pick,
     viewerId: user?.id,
-    ownerHandle: detail.ownerHandle,
+    ownerHandle,
     analystName: detail.analystName,
     analystKind: detail.analystKind,
     outcome:
@@ -87,7 +89,7 @@ export default async function PickDetailPage({ params }: { params: Promise<{ id:
             </p>
             <div className="mt-3">
               <ProofLine label="sha256(canonical(pick))" value={detail.pick.commitmentHash} />
-              <ProofLine label="Owner" value={`@${detail.ownerHandle}`} mono={false} />
+              <ProofLine label="Owner" value={`@${ownerHandle}`} mono={false} />
               <ProofLine
                 label="Analyst"
                 value={`${detail.analystName} · ${detail.analystKind}`}

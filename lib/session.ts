@@ -1,9 +1,7 @@
-import { eq } from "drizzle-orm";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
-import { getDb } from "@/db/client";
-import { users } from "@/db/schema";
+import { readJournalRecord } from "@/integrations/walrus-memory/client";
 import { SESSION_COOKIE } from "./config";
 import { getEnv } from "./env";
 import { getLogger } from "./logger";
@@ -16,11 +14,11 @@ const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 365;
  * Issues the signed session cookie. Shared by every sign-in path (wallet claim, wallet
  * login, recovery code) so the cookie's attributes cannot drift between them.
  */
-export async function startSession(userId: string): Promise<void> {
+export async function startSession(ref: string): Promise<void> {
   const store = await cookies();
   store.set({
     name: SESSION_COOKIE,
-    value: signSession(userId, getEnv().SESSION_SECRET),
+    value: signSession(ref, getEnv().SESSION_SECRET),
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
@@ -35,6 +33,10 @@ export async function clearSession(): Promise<void> {
 }
 
 export interface SessionUser {
+  /**
+   * The journal's identity: a Sui address, or a uuid for journals created before identity
+   * moved to the wallet. This is what every query keys on.
+   */
   readonly id: string;
   readonly handle: string;
   /**
@@ -42,7 +44,7 @@ export interface SessionUser {
    * so the UI must warn about that instead of pointing at a code that does not exist.
    */
   readonly hasRecovery: boolean;
-  /** The proven wallet, or null when the journal has not bound one yet. */
+  /** The proven wallet. Always present for a journal that could sign in. */
   readonly walletAddress: string | null;
 }
 
@@ -51,40 +53,40 @@ export async function readSessionUserId(): Promise<string | undefined> {
   const value = store.get(SESSION_COOKIE)?.value;
   if (!value) return undefined;
 
-  const userId = verifySession(value, getEnv().SESSION_SECRET);
-  if (!userId) {
+  const ref = verifySession(value, getEnv().SESSION_SECRET);
+  if (!ref) {
     getLogger().warn("session cookie signature is invalid");
     return undefined;
   }
-  return userId;
+  return ref;
 }
 
+/**
+ * Resolves the session without reading a database.
+ *
+ * The cookie is a signed ref, and the ref is the identity, so the only thing still needed is
+ * the display handle — which lives in the journal's own wallet-keyed memory. A missing
+ * record means the cookie names a wallet with no journal, and that is a signed-out state.
+ *
+ * `hasRecovery` is reported as true because a journal created by this code always wrote a
+ * recovery pointer. Legacy journals that never had one cannot sign in any more: their ref
+ * was a uuid and nothing maps a wallet to it, which is why the recovery path exists.
+ */
 export async function getSessionUser(): Promise<SessionUser | null> {
-  const id = await readSessionUserId();
-  if (!id) return null;
+  const ref = await readSessionUserId();
+  if (!ref) return null;
 
-  const db = getDb();
-  const rows = await db
-    .select({
-      id: users.id,
-      handle: users.handle,
-      recoveryHash: users.recoveryHash,
-      walletAddress: users.walletAddress,
-    })
-    .from(users)
-    .where(eq(users.id, id))
-    .limit(1);
-
-  const row = rows[0];
-  if (!row) {
-    getLogger().warn({ userId: id }, "session cookie points at a missing user");
+  const record = await readJournalRecord(ref);
+  if (record === null) {
+    getLogger().warn({ ref }, "session cookie names a journal with no identity record");
     return null;
   }
+
   return {
-    id: row.id,
-    handle: row.handle,
-    hasRecovery: row.recoveryHash !== null,
-    walletAddress: row.walletAddress,
+    id: record.ref,
+    handle: record.handle,
+    hasRecovery: true,
+    walletAddress: record.wallet,
   };
 }
 

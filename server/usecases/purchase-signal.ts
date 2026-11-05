@@ -64,7 +64,7 @@ export interface RecordedPayment {
 export async function recordPayment(input: {
   verified: VerifiedPayment;
   signalId: string;
-  userId?: string;
+  journalRef?: string;
   pickId?: string;
   resource?: string | null;
   requirements?: JsonObject;
@@ -75,7 +75,7 @@ export async function recordPayment(input: {
   const inserted = await db
     .insert(payments)
     .values({
-      userId: input.userId ?? null,
+      journalRef: input.journalRef ?? null,
       signalId: input.signalId,
       pickId: input.pickId ?? null,
       digest: input.verified.digest,
@@ -95,7 +95,7 @@ export async function recordPayment(input: {
     return {
       payment: inserted[0],
       created: true,
-      attributed: input.userId !== undefined,
+      attributed: input.journalRef !== undefined,
     };
   }
 
@@ -119,11 +119,11 @@ export async function recordPayment(input: {
 
   // The seller records an external settlement before the internal buyer claims it.
   // Attaching the user once lets that buyer write payment/source-ROI memories.
-  if (input.userId !== undefined && payment.userId === null) {
+  if (input.journalRef !== undefined && payment.journalRef === null) {
     const updated = await db
       .update(payments)
-      .set({ userId: input.userId })
-      .where(and(eq(payments.digest, input.verified.digest), isNull(payments.userId)))
+      .set({ journalRef: input.journalRef })
+      .where(and(eq(payments.digest, input.verified.digest), isNull(payments.journalRef)))
       .returning();
     const claimed = updated[0];
     if (claimed) return { payment: claimed, created: false, attributed: true };
@@ -132,11 +132,11 @@ export async function recordPayment(input: {
   return { payment, created: false, attributed: false };
 }
 
-async function writePaymentMemories(userId: string, payment: PaymentRow): Promise<string[]> {
+async function writePaymentMemories(journalRef: string, payment: PaymentRow): Promise<string[]> {
   const blobIds: string[] = [];
   try {
     const paymentWrite = await remember(
-      userId,
+      journalRef,
       buildPaymentMemory({
         digest: payment.digest,
         provider: (await getSignal(payment.signalId)).provider,
@@ -154,9 +154,9 @@ async function writePaymentMemories(userId: string, payment: PaymentRow): Promis
 
   try {
     const signal = await getSignal(payment.signalId);
-    const stats = await sourceRoi(signal.provider, userId);
+    const stats = await sourceRoi(signal.provider, journalRef);
     const roiWrite = await remember(
-      userId,
+      journalRef,
       buildSourceRoiMemory({
         provider: stats.provider,
         spendAtomic: stats.spendAtomic.toString(),
@@ -193,7 +193,7 @@ export interface VerifiedSignalPayment {
 export async function verifyAndRecordSignalPayment(input: {
   signalId: string;
   digest: string;
-  userId?: string;
+  journalRef?: string;
   pickId?: string;
   resource?: string | null;
   requirements?: JsonObject;
@@ -221,15 +221,15 @@ export async function verifyAndRecordSignalPayment(input: {
   const recorded = await recordPayment({
     verified,
     signalId: input.signalId,
-    ...(input.userId === undefined ? {} : { userId: input.userId }),
+    ...(input.journalRef === undefined ? {} : { journalRef: input.journalRef }),
     ...(input.pickId === undefined ? {} : { pickId: input.pickId }),
     ...(input.resource === undefined ? {} : { resource: input.resource }),
     ...(input.requirements === undefined ? {} : { requirements: input.requirements }),
   });
 
   const memoryBlobIds =
-    recorded.attributed && input.userId
-      ? await writePaymentMemories(input.userId, recorded.payment)
+    recorded.attributed && input.journalRef
+      ? await writePaymentMemories(input.journalRef, recorded.payment)
       : [];
 
   return {

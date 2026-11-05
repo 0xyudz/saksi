@@ -54,7 +54,10 @@ function downgrade(verdict: RecommendationVerdict): RecommendationVerdict {
  * Recalls Walrus Memory first, then makes the decision. Every warning in the result
  * points at the memory blob and cosine distance that caused it.
  */
-export async function recommend(userId: string, input: RecommendInput): Promise<Recommendation> {
+export async function recommend(
+  journalRef: string,
+  input: RecommendInput,
+): Promise<Recommendation> {
   const query = [
     input.market,
     input.selection,
@@ -68,12 +71,12 @@ export async function recommend(userId: string, input: RecommendInput): Promise<
   const analyst = await getAnalyst(input.analystId);
   if (!analyst) throw new AppError("NOT_FOUND", "The selected analyst does not exist.");
   if (input.pickId !== undefined) {
-    const pick = await pickForUser(input.pickId, userId);
+    const pick = await pickForUser(input.pickId, journalRef);
     if (!pick) throw new AppError("NOT_FOUND", "That pick does not belong to this journal.");
   }
 
   const credibility = await analystCredibility(input.analystId);
-  const recalled = await recall(userId, query);
+  const recalled = await recall(journalRef, query);
   const warnings: RecommendationWarning[] = [];
   const sources: RecommendationSource[] = [];
   const reasons: string[] = [];
@@ -148,7 +151,8 @@ export async function recommend(userId: string, input: RecommendInput): Promise<
     ): hit is {
       readonly citation: MemoryCitation;
       readonly memory: Extract<ParsedMemory, { kind: "preference" }>;
-    } => hit.memory !== null && hit.memory.kind === "preference" && hit.memory.userId === userId,
+    } =>
+      hit.memory !== null && hit.memory.kind === "preference" && hit.memory.userId === journalRef,
   );
   for (const hit of preferences.slice(0, 2)) {
     const { citation, memory } = hit;
@@ -275,11 +279,11 @@ export async function recommend(userId: string, input: RecommendInput): Promise<
 }
 
 export async function recommendSafely(
-  userId: string,
+  journalRef: string,
   input: RecommendInput,
 ): Promise<Recommendation> {
   try {
-    return await recommend(userId, input);
+    return await recommend(journalRef, input);
   } catch (error) {
     getLogger().error({ error: errorForLog(error) }, "recommendation failed");
     throw error;

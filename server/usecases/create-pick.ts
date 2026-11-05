@@ -40,7 +40,7 @@ export interface CreatedPick {
   readonly namespace: string;
 }
 
-export async function createPick(userId: string, input: CreatePickInput): Promise<CreatedPick> {
+export async function createPick(journalRef: string, input: CreatePickInput): Promise<CreatedPick> {
   const db = getDb();
   const analystRows = await db
     .select({ id: analysts.id })
@@ -73,7 +73,7 @@ export async function createPick(userId: string, input: CreatePickInput): Promis
   }
 
   const payload = buildPickPayload({
-    userId,
+    userId: journalRef,
     analystId: input.analystId,
     eventRef: input.eventRef,
     market: input.market,
@@ -87,7 +87,7 @@ export async function createPick(userId: string, input: CreatePickInput): Promis
   const inserted = await db
     .insert(picks)
     .values({
-      userId,
+      journalRef,
       analystId: input.analystId,
       eventRef: payload.eventRef,
       market: payload.market,
@@ -117,7 +117,7 @@ export async function createPick(userId: string, input: CreatePickInput): Promis
   });
 
   try {
-    const write = await remember(userId, memory);
+    const write = await remember(journalRef, memory);
     return {
       pick,
       commitmentHash,

@@ -3,8 +3,11 @@ import { MemWal } from "@mysten-incubation/memwal";
 import type { MemoryCitation } from "@/lib/domain";
 import { getEnv } from "@/lib/env";
 import { AppError } from "@/lib/errors";
+import { recoveryNamespace, walletNamespace } from "@/lib/journal-identity";
 import {
+  buildJournalMemory,
   buildPreferenceMemory,
+  buildRecoveryMemory,
   namespaceFor,
   parseMemory,
   type BuiltMemory,
@@ -55,8 +58,16 @@ export function getMemoryClient(): MemWal {
   return client;
 }
 
-export function userNamespace(userId: string): string {
-  return namespaceFor(getEnv().WALRUS_MEMORY_NAMESPACE_PREFIX, userId);
+/**
+ * The namespace for a journal.
+ *
+ * The ref is a Sui address for journals created after identity moved to the wallet, and a
+ * uuid for journals created before. Both are accepted so old memories stay readable where
+ * they already are: Walrus is append-only, so rewriting them would mean duplicating every
+ * record under a new name and leaving the originals behind anyway.
+ */
+export function userNamespace(ref: string): string {
+  return namespaceFor(getEnv().WALRUS_MEMORY_NAMESPACE_PREFIX, ref);
 }
 
 export async function health(): Promise<{ status: string; version: string }> {
@@ -71,8 +82,8 @@ export async function health(): Promise<{ status: string; version: string }> {
  * describing a Walrus write would be a second copy of something the relayer already
  * returns, and a stale copy at that. The blob id in the returned value is the receipt.
  */
-export async function remember(userId: string, memory: BuiltMemory): Promise<RememberedMemory> {
-  const namespace = userNamespace(userId);
+export async function remember(ref: string, memory: BuiltMemory): Promise<RememberedMemory> {
+  const namespace = userNamespace(ref);
   const result = await getMemoryClient().rememberAndWait(memory.text, namespace);
 
   return {
@@ -83,27 +94,113 @@ export async function remember(userId: string, memory: BuiltMemory): Promise<Rem
   };
 }
 
-export async function rememberPreference(
-  userId: string,
-  statement: string,
-): Promise<RememberedMemory> {
-  return remember(userId, buildPreferenceMemory({ userId, statement }));
+/**
+ * Writes the journal's identity record into its wallet-keyed namespace.
+ *
+ * This is what replaces the deleted `users` row: the handle and the journal ref live here,
+ * keyed by wallet, so `login` is an exact lookup instead of a similarity search. It is
+ * written once, at creation.
+ */
+export async function rememberJournal(input: {
+  ref: string;
+  wallet: string;
+  handle: string;
+  createdAt: string;
+}): Promise<RememberedMemory> {
+  const namespace = walletNamespace(getEnv().WALRUS_MEMORY_NAMESPACE_PREFIX, input.wallet);
+  const result = await getMemoryClient().rememberAndWait(buildJournalMemory(input).text, namespace);
+
+  return {
+    id: result.id,
+    jobId: result.job_id ?? result.id,
+    blobId: result.blob_id,
+    namespace,
+  };
 }
 
-export async function recall(
-  userId: string,
-  query: string,
-  limit = getEnv().WALRUS_RECALL_LIMIT,
-): Promise<{ hits: RecalledMemoryHit[] }> {
-  return recallNamespace(userNamespace(userId), query, limit);
+/** Reads a journal's identity record by wallet, or null when that wallet has no journal. */
+export async function readJournalRecord(wallet: string): Promise<{
+  ref: string;
+  wallet: string;
+  handle: string;
+} | null> {
+  const namespace = walletNamespace(getEnv().WALRUS_MEMORY_NAMESPACE_PREFIX, wallet);
+  const { hits } = await recallNamespace(namespace, "journal identity handle", 10);
+
+  for (const hit of hits) {
+    if (hit.memory?.kind === "journal") {
+      return { ref: hit.memory.ref, wallet: hit.memory.wallet, handle: hit.memory.handle };
+    }
+  }
+  return null;
 }
 
 /**
- * Reads a namespace by name rather than by owning user id.
+ * Writes the recovery pointer: `saksi:recovery:<sha256(code)>` holds the journal it unlocks.
+ *
+ * The code carries 120 bits of entropy, so publishing the digest of it reveals nothing
+ * usable. This is how recovery works without a table — the code itself is the lookup key,
+ * and the relayer does the exact-key lookup.
+ */
+export async function rememberRecovery(input: {
+  code: string;
+  ref: string;
+  wallet: string;
+  handle: string;
+  createdAt: string;
+}): Promise<RememberedMemory> {
+  const namespace = recoveryNamespace(getEnv().WALRUS_MEMORY_NAMESPACE_PREFIX, input.code);
+  const result = await getMemoryClient().rememberAndWait(
+    buildRecoveryMemory(input).text,
+    namespace,
+  );
+
+  return {
+    id: result.id,
+    jobId: result.job_id ?? result.id,
+    blobId: result.blob_id,
+    namespace,
+  };
+}
+
+/** Reads the journal pointer stored under a recovery code, or null when the code is unused. */
+export async function readRecoveryPointer(code: string): Promise<{
+  ref: string;
+  wallet: string;
+  handle: string;
+} | null> {
+  const namespace = recoveryNamespace(getEnv().WALRUS_MEMORY_NAMESPACE_PREFIX, code);
+  const { hits } = await recallNamespace(namespace, "recovery journal wallet", 10);
+
+  for (const hit of hits) {
+    if (hit.memory?.kind === "recovery") {
+      return { ref: hit.memory.ref, wallet: hit.memory.wallet, handle: hit.memory.handle };
+    }
+  }
+  return null;
+}
+
+export async function rememberPreference(
+  ref: string,
+  statement: string,
+): Promise<RememberedMemory> {
+  return remember(ref, buildPreferenceMemory({ userId: ref, statement }));
+}
+
+export async function recall(
+  ref: string,
+  query: string,
+  limit = getEnv().WALRUS_RECALL_LIMIT,
+): Promise<{ hits: RecalledMemoryHit[] }> {
+  return recallNamespace(userNamespace(ref), query, limit);
+}
+
+/**
+ * Reads a namespace by name rather than by owning journal.
  *
  * Walrus Memory namespaces are readable by any account holding a delegate key for the
  * relayer, which is what lets the app reconstruct a journal from blobs alone instead of
- * from a local table. Callers pass `userNamespace(userId)` when they mean "mine".
+ * from a local table. Callers pass `userNamespace(ref)` when they mean "mine".
  */
 export async function recallNamespace(
   namespace: string,
@@ -159,8 +256,8 @@ export async function listNamespaces(): Promise<
   return namespaces;
 }
 
-export async function listMemories(userId: string, pageSize = 100): Promise<MemoryPage> {
-  const namespace = userNamespace(userId);
+export async function listMemories(ref: string, pageSize = 100): Promise<MemoryPage> {
+  const namespace = userNamespace(ref);
   const memwal = getMemoryClient();
 
   let cursor: string | undefined;

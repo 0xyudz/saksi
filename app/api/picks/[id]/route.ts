@@ -3,6 +3,7 @@ import { z } from "zod";
 import { AppError } from "@/lib/errors";
 import { handleRoute, jsonResponse } from "@/lib/http";
 import { optionalApiUserId } from "@/server/auth";
+import { labelForOne } from "@/server/data/journal";
 import { getPickDetail } from "@/server/data/picks";
 import { presentPick } from "@/server/presenters/pick";
 
@@ -25,7 +26,7 @@ export async function GET(
     const view = presentPick({
       pick: detail.pick,
       viewerId,
-      ownerHandle: detail.ownerHandle,
+      ownerHandle: await labelForOne(detail.ownerRef),
       analystName: detail.analystName,
       analystKind: detail.analystKind,
       outcome:

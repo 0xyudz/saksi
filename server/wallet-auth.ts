@@ -29,7 +29,11 @@ const CHALLENGE_TTL_MS = 5 * 60 * 1000;
 /** Bound so a table scan cannot be driven by a client that never finishes a challenge. */
 const MAX_OPEN_CHALLENGES_PER_ADDRESS = 5;
 
-export const WALLET_CHALLENGE_PURPOSES = ["claim", "bind", "login"] as const;
+/**
+ * `bind` is gone: a journal *is* its wallet, so there is no separate address to attach. A
+ * wallet that has never signed cannot become a journal, and one that has needs no binding.
+ */
+export const WALLET_CHALLENGE_PURPOSES = ["claim", "login"] as const;
 export type WalletChallengePurpose = (typeof WALLET_CHALLENGE_PURPOSES)[number];
 
 export interface IssuedChallenge {

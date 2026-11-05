@@ -2,7 +2,7 @@ import Link from "next/link";
 
 import { PageHeader, StatCard } from "@/components/ui";
 import { listNamespaces } from "@/integrations/walrus-memory/client";
-import { MEMORY_KINDS } from "@/integrations/walrus-memory/schema";
+import { JOURNAL_MEMORY_KINDS } from "@/integrations/walrus-memory/schema";
 import { getEnv } from "@/lib/env";
 import { analystsFromJournal, reconstructJournal } from "@/server/scoring/reconstruct";
 
@@ -32,9 +32,25 @@ export default async function JournalsPage() {
     failure = error instanceof Error ? error.message : "The relayer did not answer.";
   }
 
+  /*
+   * Identity namespaces (`saksi:wallet:<address>` and `saksi:recovery:<digest>`) are listed
+   * by the relayer like any other, but they are not journals: they hold one identity record
+   * each and no history. Filtering them out is what keeps "journals" meaning journals.
+   */
   const journals = namespaces
-    .filter((entry) => entry.name.startsWith(`${prefix}:`))
+    .filter(
+      (entry) =>
+        entry.name.startsWith(`${prefix}:`) &&
+        !entry.name.startsWith(`${prefix}:wallet:`) &&
+        !entry.name.startsWith(`${prefix}:recovery:`) &&
+        !entry.name.includes(":probe:"),
+    )
     .sort((a, b) => b.memoryCount - a.memoryCount);
+
+  const identityNamespaces = namespaces.filter(
+    (entry) =>
+      entry.name.startsWith(`${prefix}:wallet:`) || entry.name.startsWith(`${prefix}:recovery:`),
+  );
 
   return (
     <div>
@@ -47,9 +63,9 @@ export default async function JournalsPage() {
       <div className="container-page pb-20">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard
-            label="Namespaces"
+            label="Journals"
             value={journals.length}
-            detail={`prefix "${prefix}:" on the relayer`}
+            detail={`history namespaces under "${prefix}:"`}
             tone="amber"
           />
           <StatCard
@@ -59,9 +75,14 @@ export default async function JournalsPage() {
             tone="green"
           />
           <StatCard
+            label="Identity records"
+            value={identityNamespaces.length}
+            detail="wallet and recovery namespaces, excluded above"
+          />
+          <StatCard
             label="Memory kinds"
-            value={MEMORY_KINDS.length}
-            detail="pick, pick_commit, pick_reveal, outcome, bias, source_roi, preference, payment"
+            value={JOURNAL_MEMORY_KINDS.length}
+            detail={JOURNAL_MEMORY_KINDS.join(", ")}
           />
           <StatCard
             label="Read path"
@@ -115,11 +136,13 @@ export default async function JournalsPage() {
                   </div>
 
                   <div className="mt-3 flex flex-wrap gap-2">
-                    {MEMORY_KINDS.filter((kind) => journal.kinds.includes(kind)).map((kind) => (
-                      <span key={kind} className="badge badge-win">
-                        {kind}
-                      </span>
-                    ))}
+                    {JOURNAL_MEMORY_KINDS.filter((kind) => journal.kinds.includes(kind)).map(
+                      (kind) => (
+                        <span key={kind} className="badge badge-win">
+                          {kind}
+                        </span>
+                      ),
+                    )}
                     {journal.kinds.length === 0 ? (
                       <span className="badge badge-neutral">no decodable records</span>
                     ) : null}

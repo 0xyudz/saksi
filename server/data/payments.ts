@@ -12,10 +12,10 @@ export interface SourceRoi {
   readonly roi: number;
 }
 
-export async function sourceRoi(provider: string, userId?: string): Promise<SourceRoi> {
+export async function sourceRoi(provider: string, journalRef?: string): Promise<SourceRoi> {
   const filter = [
     eq(signals.provider, provider),
-    ...(userId === undefined ? [] : [eq(payments.userId, userId)]),
+    ...(journalRef === undefined ? [] : [eq(payments.journalRef, journalRef)]),
   ];
   const rows = await getDb()
     .select({

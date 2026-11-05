@@ -182,7 +182,7 @@ async function consultOracle(
 }
 
 export async function resolvePick(
-  userId: string,
+  journalRef: string,
   pickId: string,
   input: ResolvePickInput,
 ): Promise<ResolvePickResult> {
@@ -196,7 +196,7 @@ export async function resolvePick(
 
   const row = rows[0];
   if (!row) throw new AppError("NOT_FOUND", "Pick not found.");
-  if (row.pick.userId !== userId) {
+  if (row.pick.journalRef !== journalRef) {
     throw new AppError("FORBIDDEN", "Only the owner of a pick can resolve it.");
   }
   if (row.outcome) {
@@ -251,7 +251,7 @@ export async function resolvePick(
       .values({
         pickId,
         result: input.result,
-        resolvedBy: `user:${userId}`,
+        resolvedBy: `user:${journalRef}`,
         sourceUrl: input.sourceUrl,
         resolvedAt: new Date(resolvedAt),
         verification: oracle.verification,
@@ -290,7 +290,7 @@ export async function resolvePick(
 
   let outcomeWrite: Awaited<ReturnType<typeof remember>>;
   try {
-    outcomeWrite = await remember(userId, memory);
+    outcomeWrite = await remember(journalRef, memory);
   } catch (error) {
     await db.transaction(async (tx) => {
       await tx.delete(outcomes).where(eq(outcomes.pickId, pickId));
@@ -323,7 +323,7 @@ export async function resolvePick(
     const top = patterns[0];
     if (top) {
       const write = await remember(
-        userId,
+        journalRef,
         buildBiasMemory({
           analyst: row.pick.analystId,
           pattern: top.pattern,
@@ -345,9 +345,9 @@ export async function resolvePick(
   try {
     const providers = await providersForPick(pickId);
     for (const provider of providers) {
-      const stats = await sourceRoi(provider, userId);
+      const stats = await sourceRoi(provider, journalRef);
       const write = await remember(
-        userId,
+        journalRef,
         buildSourceRoiMemory({
           provider: stats.provider,
           spendAtomic: stats.spendAtomic.toString(),

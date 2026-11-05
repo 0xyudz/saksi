@@ -1,6 +1,6 @@
 import { and, count, desc, eq, inArray } from "drizzle-orm";
 import { getDb } from "@/db/client";
-import { analysts, outcomes, picks, users, type AnalystRow, type PickRow } from "@/db/schema";
+import { analysts, outcomes, picks, type AnalystRow, type PickRow } from "@/db/schema";
 import type { CredibilityBreakdown } from "@/server/scoring/credibility";
 import { credibilityBreakdown, type CredibilitySample } from "@/server/scoring/credibility";
 
@@ -184,11 +184,11 @@ export async function getPickWithOutcome(
   return row ? { pick: row.pick, outcome: row.outcome } : null;
 }
 
-export async function pickForUser(pickId: string, userId: string): Promise<PickRow | null> {
+export async function pickForUser(pickId: string, journalRef: string): Promise<PickRow | null> {
   const rows = await getDb()
     .select()
     .from(picks)
-    .where(and(eq(picks.id, pickId), eq(picks.userId, userId)))
+    .where(and(eq(picks.id, pickId), eq(picks.journalRef, journalRef)))
     .limit(1);
   return rows[0] ?? null;
 }
@@ -198,7 +198,8 @@ export interface PickDetail {
   readonly outcome: typeof outcomes.$inferSelect | null;
   readonly analystName: string;
   readonly analystKind: AnalystRow["kind"];
-  readonly ownerHandle: string;
+  /** The owning journal's ref. The handle is a display name and is resolved separately. */
+  readonly ownerRef: string;
 }
 
 export async function getPickDetail(pickId: string): Promise<PickDetail | null> {
@@ -208,11 +209,9 @@ export async function getPickDetail(pickId: string): Promise<PickDetail | null> 
       outcome: outcomes,
       analystName: analysts.name,
       analystKind: analysts.kind,
-      ownerHandle: users.handle,
     })
     .from(picks)
     .innerJoin(analysts, eq(analysts.id, picks.analystId))
-    .innerJoin(users, eq(users.id, picks.userId))
     .leftJoin(outcomes, eq(outcomes.pickId, picks.id))
     .where(eq(picks.id, pickId))
     .limit(1);
@@ -224,7 +223,7 @@ export async function getPickDetail(pickId: string): Promise<PickDetail | null> 
         outcome: row.outcome,
         analystName: row.analystName,
         analystKind: row.analystKind,
-        ownerHandle: row.ownerHandle,
+        ownerRef: row.pick.journalRef,
       }
     : null;
 }
@@ -233,7 +232,7 @@ export interface PickFeedItem {
   readonly pick: PickRow;
   readonly analystName: string;
   readonly analystKind: AnalystRow["kind"];
-  readonly userHandle: string;
+  readonly journalRef: string;
   readonly outcome: {
     readonly result: "win" | "loss" | "void";
     readonly resolvedAt: Date;
@@ -246,14 +245,13 @@ export interface PickFeedItem {
   } | null;
 }
 
-export async function recentPicks(limit = 50, userId?: string): Promise<PickFeedItem[]> {
+export async function recentPicks(limit = 50, journalRef?: string): Promise<PickFeedItem[]> {
   const db = getDb();
   const base = db
     .select({
       pick: picks,
       analystName: analysts.name,
       analystKind: analysts.kind,
-      userHandle: users.handle,
       result: outcomes.result,
       resolvedAt: outcomes.resolvedAt,
       sourceUrl: outcomes.sourceUrl,
@@ -265,18 +263,17 @@ export async function recentPicks(limit = 50, userId?: string): Promise<PickFeed
     })
     .from(picks)
     .innerJoin(analysts, eq(analysts.id, picks.analystId))
-    .innerJoin(users, eq(users.id, picks.userId))
     .leftJoin(outcomes, eq(outcomes.pickId, picks.id));
 
-  const rows = await (userId === undefined
+  const rows = await (journalRef === undefined
     ? base.orderBy(desc(picks.committedAt)).limit(limit)
-    : base.where(eq(picks.userId, userId)).orderBy(desc(picks.committedAt)).limit(limit));
+    : base.where(eq(picks.journalRef, journalRef)).orderBy(desc(picks.committedAt)).limit(limit));
 
   return rows.map((row) => ({
     pick: row.pick,
     analystName: row.analystName,
     analystKind: row.analystKind,
-    userHandle: row.userHandle,
+    journalRef: row.pick.journalRef,
     outcome:
       row.result === null ||
       row.resolvedAt === null ||
@@ -319,12 +316,12 @@ export interface VerificationStats {
  * self-graded record is not the same product as money earned from a verified one, and a
  * seller should not be able to imply otherwise by omitting the count.
  */
-export async function verificationStatsForUser(userId: string): Promise<VerificationStats> {
+export async function verificationStatsForUser(journalRef: string): Promise<VerificationStats> {
   const rows = await getDb()
     .select({ verification: outcomes.verification, total: count() })
     .from(outcomes)
     .innerJoin(picks, eq(picks.id, outcomes.pickId))
-    .where(eq(picks.userId, userId))
+    .where(eq(picks.journalRef, journalRef))
     .groupBy(outcomes.verification);
 
   const byState = new Map(rows.map((row) => [row.verification, Number(row.total)]));

@@ -92,9 +92,9 @@ provider lives in `app/`. It is documented as such rather than left as a surpris
 
 Dependencies flow one way: `app → server → integrations → lib`, with `db/` read by `server/`
 and `integrations/` directly (there is no repository abstraction in front of Drizzle, on
-purpose — the SQL is meant to be readable). `lib/` never imports from `app/` or `server/`;
-the one exception is `lib/session.ts`, which needs the `users` table to turn a cookie into a
-user and therefore imports `db/`.
+purpose — the SQL is meant to be readable). `lib/` never imports from `app/` or `server/`.
+`lib/session.ts` no longer imports `db/` at all: turning a cookie into a journal is a relayer
+read, so the dependency it needs is `integrations/`.
 
 ---
 
@@ -115,10 +115,19 @@ eliminate most conventional auth designs:
 3. **It must work with zero installation.** A reviewer opening the link must be able to
    create a journal immediately.
 
-What is left is a single design: **the server issues one secret, and that secret is the only
-proof of ownership.**
+What is left is a single design: **a journal is the Sui address that proved ownership of
+it.** There is no account row, no password and no email. The wallet signature is the
+credential, and the recovery code is the fallback for a lost wallet — not the primary key.
+
+The first release did the opposite: a uuid row in `users`, with a handle as the unique key
+and a scrypt-hashed recovery code. Section 3.8 records why that was replaced rather than
+patched.
 
 ### 3.2 The recovery code
+
+The recovery code is still 24 symbols from a 32-character alphabet, and it is still what
+saves a journal when the wallet is gone. What changed is _where the lookup happens_: there is
+no `users.recovery_hash` column any more.
 
 `lib/recovery-format.ts` defines the shape:
 
@@ -141,46 +150,44 @@ abcd efgh jklm npqr stuv wxyz
 ABCDEFGHJKLMNPQRSTUVWXYZ
 ```
 
-### 3.3 Storage: scrypt, never plaintext
+### 3.3 Storage: the code's digest names a namespace
 
-The database column is `users.recovery_hash`, containing:
-
-```txt
-scrypt$<16-byte salt, hex>$<32-byte derived key, hex>
-```
-
-Parameters: `N=16384, r=8, p=1`. A database leak therefore yields no usable code — only 24
-symbols already stretched by a memory-hard KDF. Comparison uses `timingSafeEqual` on the
-derived bytes.
-
-The plaintext code exists in exactly three places: the generator's return value, the HTTP
-response of `POST /api/session`, and the onboarding screen. There is **no endpoint that can
-re-display it**, because the server genuinely cannot — it only has the hash. Any endpoint
-that could reveal it would mean the code was stored readably, which would undo this section.
-
-### 3.4 Enumeration defence: `ABSENT_HASH`
-
-A subtle leak that is easy to miss: if an unknown handle returned immediately while a known
-handle with a wrong code took 50–100 ms (scrypt), the timing difference alone would let
-someone enumerate which handles exist.
-
-`verifyRecoveryCode()` therefore always performs a full derivation. When `stored` is `null`,
-it derives against `ABSENT_HASH` — a well-formed hash of all zeroes — and then returns
-`false` because `stored !== null` can never satisfy the final check. The result:
-
-- Unknown handle → full scrypt run → `false`.
-- Known handle, wrong code → full scrypt run → `false`.
-- Both produce the **same** `401 UNAUTHORIZED` with the same message.
-
-Verified by hand: wrong code and unknown handle return byte-identical error bodies.
-
-### 3.5 The session cookie
-
-After a successful create or resume, `POST`/`PATCH /api/session` writes:
+`lib/journal-identity.ts` derives the lookup key:
 
 ```txt
-saksi_user = <userId>.<base64url(HMAC-SHA256(userId, SESSION_SECRET))>
+recoveryLookupKey(code) = sha256(upper(trim(code)))[0..32]
+namespace               = <prefix>:recovery:<that 32-hex digest>
 ```
+
+The namespace _name_ is the secret, and that is safe because the code carries 120 bits. An
+attacker holding the relayer's full namespace list learns 32 hex characters per code and
+cannot invert them: enumerating 2¹²⁰ inputs is not a search, it is a physical impossibility.
+Truncating the digest to 128 bits keeps it far beyond reach while staying a readable width.
+
+This is what replaces the old scrypt column, and it is a strict improvement in one respect
+and a trade in another:
+
+- **Improvement:** there is no credential store to leak. A database dump contains no
+  recovery material at all, because there is no database column for it.
+- **Trade:** the scrypt hash used to make a _stolen_ hash expensive to attack. Here the
+  digest is public by construction, so the only defence is the entropy of the code itself —
+  which is 120 bits, not a human-chosen password. That is why the alphabet and length are
+  fixed and not configurable.
+
+Verification is therefore an exact-key lookup, not a similarity search: the relayer is asked
+for the one namespace whose name is the digest. A wrong code names a namespace that does not
+exist, and the app returns the same `401` it returns for a malformed one.
+
+### 3.4 The session cookie
+
+After a successful claim, wallet login or recovery, the app writes:
+
+```txt
+saksi_user = <ref>.<base64url(HMAC-SHA256(ref, SESSION_SECRET))>
+```
+
+`<ref>` is the journal's identity: a lowercase Sui address for journals created after this
+change, or a uuid for journals created before it (see 3.9).
 
 Properties:
 
@@ -191,17 +198,33 @@ Properties:
 | `secure`   | true in production | Never sent over plaintext.                                              |
 | `path`     | `/`                | Whole app.                                                              |
 | `maxAge`   | 365 days           | A journal is meant to outlive a browser restart.                        |
-| Payload    | the user UUID only | No roles, no handle, no permissions baked into the token.               |
+| Payload    | the ref only       | No roles, no handle, no permissions baked into the token.               |
 
 `verifySession()` splits on the **last** dot, validates the signature shape with a fixed
 43-character base64url pattern, and compares with `timingSafeEqual`. A tampered signature, a
-tampered user id, a legacy unsigned cookie, or the same token under a different secret all
-return `null`, which the app treats as "no session".
+tampered ref, a legacy unsigned cookie, or the same token under a different secret all return
+`null`, which the app treats as "no session".
 
-Because the payload is only an id, **authorisation is re-read from Postgres on every
-request** (`getSessionUser()` joins `users`). Deleting a journal kills its sessions
-instantly. A JWT would have kept a claim alive until expiry instead, which is the opposite of
-what this product wants.
+**Authorisation is structural, not looked up.** The cookie's ref _is_ the proven address,
+because a session is only ever issued after a signature over that address. There is no row to
+re-read on each request: `getSessionUser()` fetches the display handle from the journal's own
+wallet-keyed memory and nothing else. A cookie naming a wallet with no identity record
+resolves to `null`, which is the signed-out state.
+
+Because the ref form changed, **every session issued before this release is invalid**. That is
+correct rather than unfortunate: the old cookies carried uuids that no longer identify a
+signing wallet.
+
+### 3.5 Wallet proofs
+
+`server/wallet-auth.ts` owns the challenge. A Sui address on its own proves nothing, so the
+server issues a message binding the address, the purpose (`claim` or `login`), a subject, a
+nonce and an expiry; the wallet signs those exact bytes; the nonce is consumed with an atomic
+compare-and-set before the Ed25519 signature is checked. A replayed nonce fails even when the
+signature is valid.
+
+`bind` is gone. A journal _is_ its wallet, so there is no separate address to attach, and the
+route, the component and the purpose were deleted rather than left as dead code.
 
 ### 3.6 CSRF: two levels of origin checking
 
@@ -225,83 +248,92 @@ than a cookie. Verified by hand: a cross-origin `POST` returns `403`.
   section 3.1 forbids.
 - A generated 120-bit code is stronger than any human-chosen password and has no reuse risk.
 
-### 3.8 Why not wallet-as-identity, and what a hybrid would need
+### 3.8 Why the handle stopped being a key
 
-This is a reasonable question: make the Sui wallet the identity, and let each address claim a
-handle. It is a real architecture change, not a refactor, and it trades one set of problems
-for another.
+The first release made the handle unique and used it to select a journal. That was a
+database guarantee, and it is the one guarantee Walrus cannot provide. This section records
+the measurement that forced the change, because the obvious alternative was tried first.
 
-**What would have to be built:**
+**The rejected design.** Key identity by handle: namespace `saksi:journal:<handle>`, with
+`listNamespaces()` used to check the name was free before writing. It fails for a reason that
+no amount of care fixes:
 
-1. A unique `wallet_address` column on `users`, plus a migration.
-2. `POST /api/session/challenge` issuing a single-use nonce with a short TTL.
-3. `POST /api/session/verify` verifying a signed personal message with
-   `verifyPersonalMessageSignature` from `@mysten/sui`.
-4. The signed message must bind **domain + nonce + issued-at + statement**. Without the
-   domain and nonce, any signature the user ever produced on another site could be replayed
-   here.
-5. Handle claiming per address, with uniqueness on both `handle` and `wallet_address`.
-6. A complete rewrite of `/onboarding` and `/resume`.
-7. A migration path for existing journals — and `testdemo` and `demo_buyer` predate recovery
-   codes entirely, so they have neither a hash nor an address to migrate.
+1. `listNamespaces()` followed by a write is **check-then-write, not atomic**. Two people
+   claiming one handle at the same moment both observe it free and both write.
+2. Because the namespace is derived from the handle, those two writes land in the **same
+   namespace**. Their memories merge. That is not a duplicate name — it is two journals
+   silently becoming one, which corrupts both track records.
+3. `recall()` is a similarity search, not a key lookup. Asking for "wallet 0xe47cc1da…" can
+   return a neighbouring journal with a small distance. For authentication, "close enough"
+   is the same as wrong.
 
-**What improves:** nothing can be lost the way a code can; ownership is proven
-cryptographically; the handle is automatically bound to the paying wallet, so
-`pick_id → source ROI` attribution becomes automatic rather than optional.
+**What was adopted instead.** The identity is the wallet address, and the handle is a display
+name:
 
-**What gets worse:**
+| Concern           | Guarantee                                                                                       |
+| ----------------- | ----------------------------------------------------------------------------------------------- |
+| Wallet uniqueness | Free. The wallet _is_ the ref, and two journals cannot share one without sharing a private key. |
+| Handle uniqueness | **Given up on purpose.** Two journals may show the same handle.                                 |
+| Login lookup      | Exact-key: `saksi:wallet:<address>` holds the identity record.                                  |
+| Recovery lookup   | Exact-key: `saksi:recovery:<sha256(code)>` holds the journal pointer.                           |
 
-- **The app becomes unusable without a wallet extension.** A reviewer who opens the link in
-  a plain browser cannot enter at all. Today they can create a journal and try every feature
-  immediately.
-- **Losing the wallet loses the journal permanently.** A recovery code can be stored in a
-  password manager and read back; a rotated or abandoned address cannot.
-- **Multi-wallet.** Most people have several addresses. Without explicit support, a user is
-  locked to one forever.
-- **A signature prompt on every new browser or device.**
-- **Zero additional integration credit.** The scoring is 30% Walrus + Tatum, 30% technical
-  quality, 20% creativity, 20% presentation. Wallet auth touches neither Walrus nor Tatum.
+Giving up handle uniqueness is the deliberate part. A handle authorises nothing now, so a
+duplicate is cosmetic — two people both calling themselves `@saksi_dev` is a display problem.
+A race that merges two journals is a data-integrity problem. Trading the first for the
+second is the right direction, and the code says so where it matters.
 
-**The recommended shape is a hybrid, after submission:** keep handle + recovery code as the
-baseline, and let a signed-in user _link_ a wallet to their journal. Once linked,
-"sign in with wallet" appears next to "resume with recovery code". That delivers the
-requested behaviour — one handle per wallet — while keeping the journal reachable without a
-wallet and without a forced migration of existing rows. Cost is roughly one migration, one
-column, two routes, one component, plus tests for nonce replay and a foreign-domain
-signature.
+**What it cost.** `/onboarding` no longer checks whether a name is taken, and the UI says so
+explicitly instead of implying a claim. `GET /api/session` cannot warn about a lost recovery
+code any more, because `hasRecovery` is now a property of a pointer that is either written at
+creation or not; journals created by this code always write one.
 
-This is recorded as a deliberate decision, not an oversight. The alternative — signing in with a
-Sui wallet and claiming a handle per address — was evaluated in full and rejected for the
-current release; the trade-offs are listed above rather than left implicit.
+### 3.9 Legacy journals and the append-only problem
 
-### 3.9 Legacy journals
+Walrus is append-only, so the 40 memories written before this change cannot be moved. They
+live in `saksi:<uuid>`. Rewriting them would duplicate every record and leave the originals
+in place anyway.
 
-`testdemo` and `demo_buyer` were created before recovery codes existed, so
-`recovery_hash IS NULL` and they can never be resumed by guessing. `verifyRecoveryCode()`
-derives against `ABSENT_HASH` in that case, and the final `stored !== null` guard means the
-result is always `false` — a journal with no stored credential cannot be opened by any input.
+So the ref kept its old form for old journals:
 
-The only way to give such a journal a credential is the operator CLI:
+- `lib/journal-identity.ts` accepts **either** a lowercase 64-hex Sui address **or** a uuid.
+  `isWalletRef`, `isLegacyRef` and `isJournalRef` make the distinction explicit.
+- A journal's data stays in `saksi:<ref>`, whatever form its ref has.
+- Only the _identity lookup_ moved to `saksi:wallet:<address>`, which is why login works for
+  old journals without touching their history.
+
+`picks.journal_ref`, `signals.seller_ref` and `payments.journal_ref` therefore hold a mix of
+addresses and uuids, and the code treats both as opaque. `PickPayload.userId` is deliberately
+**not** renamed: it is inside the hashed payload, so renaming it would change the canonical
+JSON and invalidate every commitment already sealed. `server/scoring/commitment.ts` documents
+this at the field.
+
+Three journals have no wallet at all (`saksi_demo`, `demo_buyer`, `testdemo`). They cannot
+sign in and cannot sell, because there is no address to prove. Their memories stay readable
+at `/journals/<uuid>`, which is the honest outcome: they are history, not identities.
+
+The operator CLI still exists for a journal whose recovery pointer was never written:
 
 ```bash
-pnpm recovery:issue <handle> <out-file>
+pnpm recovery:issue <wallet> <out-file>
 ```
 
-It refuses to overwrite an existing hash (that would lock out the current holder), writes the
-code to a file with mode `0600` rather than stdout (so it never lands in a terminal
-transcript or CI log), and prints a reminder to move it into a password manager. There is
-deliberately **no HTTP endpoint** for this, because any endpoint that mints a code for a
-handle is an account takeover primitive.
-
-`GET /api/session` reports `hasRecovery: false` for these journals so the UI can warn instead
-of pointing at a code that does not exist.
+It writes the code to a file with mode `0600` rather than stdout (so it never lands in a
+terminal transcript or CI log), and prints a reminder to move it into a password manager.
+There is deliberately **no HTTP endpoint** for this, because any endpoint that mints a code
+for a wallet is an account takeover primitive.
 
 ### 3.10 Known limits of this model
 
 - The cookie has no rotation and no revocation list. A leaked `SESSION_SECRET` forges any
   session. Acceptable for a hackathon; not acceptable for production.
-- Losing the code loses the journal. Sealed picks stay sealed forever. This is a direct
-  consequence of decision 3.1, and it is what makes "nobody can peek" credible.
+- Losing both the wallet and the code loses the journal. Sealed picks stay sealed forever.
+  This is a direct consequence of decision 3.1, and it is what makes "nobody can peek"
+  credible.
+- Handles are not unique, so `@name` is not an address. The journal URL is the ref, and the
+  UI falls back to a truncated address when a handle cannot be read.
+- Reading a handle costs a relayer call. Measured 0.4–6 s per wallet lookup, which is why
+  pages that list many picks resolve handles once and concurrently, and why the leaderboard
+  still reads Postgres (section 6).
 - The `PATCH /api/session` rate limit (10/min) lives in process memory, so it does not span
   serverless instances.
 
@@ -765,9 +797,9 @@ though the seller already did — that protects the buyer from a malicious selle
 
 `payments.digest` is unique. `recordPayment()` inserts with `onConflictDoNothing`, then reads
 the existing row and applies the binding rules. If an external settlement was recorded first
-(the agent path, `userId` null) and a journal later claims it, the row is updated once with
-`where userId is null` so the claim is not repeatable — and only that transition writes the
-payment and source-ROI memories.
+(the agent path, `journal_ref` null) and a journal later claims it, the row is updated once
+with `where journal_ref is null` so the claim is not repeatable — and only that transition
+writes the payment and source-ROI memories.
 
 ---
 
@@ -886,37 +918,40 @@ optimisation, it is a decision about the whole app.
 
 ## 11. Data model
 
-Eight tables, six migrations (`0000`–`0006`).
+Seven tables, seven migrations (`0000`–`0007`). There is no `users` table: a journal is the
+wallet that proved ownership of it, so identity has no row.
 
 ```txt
-users ──┬── picks ── outcomes
-        │      │
-        │      └── payments ── signals
-        └── payments
+analysts ── picks ── outcomes
+              │
+              └── payments ── signals
 
 wallet_challenges   (single-use nonces)
 recommendations     (pick_id nullable, cited_memory_ids jsonb)
 ```
 
-| Table               | Purpose                      | Key constraints                                                                         |
-| ------------------- | ---------------------------- | --------------------------------------------------------------------------------------- |
-| `users`             | a journal identity           | `handle` unique; `recovery_hash` nullable (legacy journals)                             |
-| `analysts`          | who is being tracked         | `(name, kind)` unique; **global**, not owned by a user                                  |
-| `picks`             | a sealed commitment          | FKs: `user_id` cascade, `analyst_id` restrict; indexes on user, analyst, status         |
-| `outcomes`          | the resolution               | `pick_id` unique, cascade delete                                                        |
-| `signals`           | a purchasable signal listing | `(provider, external_ref)` unique; `listing_fee_digest` unique so one fee = one listing |
-| `payments`          | a verified settlement        | `digest` unique; `user_id` and `pick_id` `set null` on delete; index on payer           |
-| `wallet_challenges` | a single-use nonce           | `nonce` unique; consumed once, so a signature cannot be replayed                        |
-| `recommendations`   | a persisted verdict          | index on `created_at`; `pick_id` `set null` on delete                                   |
+| Table               | Purpose                      | Key constraints                                                                                                   |
+| ------------------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `analysts`          | who is being tracked         | `(name, kind)` unique; **global**, not owned by a journal                                                         |
+| `picks`             | a sealed commitment          | `journal_ref` text (no FK: there is no journal table); `analyst_id` restrict; indexes on journal, analyst, status |
+| `outcomes`          | the resolution               | `pick_id` unique, cascade delete                                                                                  |
+| `signals`           | a purchasable signal listing | `(provider, external_ref)` unique; `listing_fee_digest` unique so one fee = one listing                           |
+| `payments`          | a verified settlement        | `digest` unique; `journal_ref` and `pick_id` `set null` on delete; index on payer                                 |
+| `wallet_challenges` | a single-use nonce           | `nonce` unique; consumed once, so a signature cannot be replayed                                                  |
+| `recommendations`   | a persisted verdict          | index on `created_at`; `pick_id` `set null` on delete                                                             |
 
-Two design notes:
+Three design notes:
 
+- **`journal_ref` is not a foreign key, and that is the point.** The referenced identity is a
+  wallet address, and an address needs no row to exist. It holds a lowercase Sui address for
+  journals created after migration `0007`, and a uuid for those created before, because their
+  memories already live in `saksi:<uuid>` (section 3.9).
 - **Analysts are global.** A pick references an analyst, not "my analyst", so credibility is
   comparable across journals. The trade-off is that deleting a journal leaves its analysts
   behind; cleanup is a documented SQL statement rather than a cascade, because cascading would
   silently delete another journal's history.
-- **`payments.user_id` is nullable on purpose.** The agent purchase path records a settlement
-  before any journal claims it; that row can be claimed later by digest.
+- **`payments.journal_ref` is nullable on purpose.** The agent purchase path records a
+  settlement before any journal claims it; that row can be claimed later by digest.
 
 ### 11.1 Rebuilding from Walrus, and what it costs
 
@@ -932,8 +967,9 @@ Measured on the production relayer, 16 namespaces holding 44 memories:
 | one `recall()` per namespace       | 0.9–4.8 s each |
 | sequential walk of every namespace | 25.8 s         |
 | parallel walk, 8 at a time         | 4.7 s          |
+| wallet → handle identity lookup    | 0.4–6 s        |
 
-Two consequences, both deliberate:
+Three consequences, all deliberate:
 
 1. **Per-journal reconstruction is cheap; global reconstruction is not.** `/journals/<ns>`
    reads a single namespace (~1.3 s) and is safe to serve. Rebuilding every analyst's
@@ -943,9 +979,15 @@ Two consequences, both deliberate:
 2. **`recall()` is capped at 100 results.** A namespace past that limit would reconstruct
    from a prefix of its history. `ReconstructedJournal.possiblyTruncated` reports when the
    cap was hit so the UI can say so instead of implying completeness.
+3. **A handle is a relayer read, so it is resolved once and concurrently.** `readJournalHandles()`
+   de-duplicates refs and runs them in parallel; a page that lists fifty picks makes at most
+   fifty small reads rather than fifty sequential ones, and an unreadable handle degrades to
+   a truncated address instead of failing the page.
 
-`pnpm verify:reconstruct` compares the two paths per analyst and reports `mismatches`. It is
-the evidence for the claim in §6.8, and it exits non-zero when they disagree.
+`pnpm verify:reconstruct` compares the two paths per analyst and reports `mismatches`. It
+discovers journals from `picks.journal_ref`, since there is no `users` table to enumerate.
+Last run: **0 mismatches**. It is the evidence for the claim in §6.8, and it exits non-zero
+when the two disagree.
 
 ---
 
@@ -990,12 +1032,14 @@ and the footer.
 
 ### Marketing pages
 
-| Page            | What it does                                                                                                                                                                   |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `/`             | Landing page: the problem, the four steps, the three integrations with real recorded values, what the product explicitly does not claim, and the document index.               |
-| `/how-it-works` | The lifecycle table (what each state writes and refuses), why the hash must be canonical, the scoring and verdict formulas, the six-step x402 sequence, and the stated limits. |
-| `/docs`         | Index of the documents, with a reading order.                                                                                                                                  |
-| `/docs/[slug]`  | Renders `README.md` and the four files in `docs/` directly, prerendered by `generateStaticParams`.                                                                             |
+| Page                    | What it does                                                                                                                                                                   |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `/`                     | Landing page: the problem, the four steps, the three integrations with real recorded values, what the product explicitly does not claim, and the document index.               |
+| `/how-it-works`         | The lifecycle table (what each state writes and refuses), why the hash must be canonical, the scoring and verdict formulas, the six-step x402 sequence, and the stated limits. |
+| `/docs`                 | Index of the documents, with a reading order.                                                                                                                                  |
+| `/docs/[slug]`          | Renders `README.md` and the four files in `docs/` directly, prerendered by `generateStaticParams`.                                                                             |
+| `/journals`             | Every journal namespace the relayer reports, with memory counts and reconstructed track records. No SQL in this read path.                                                     |
+| `/journals/[namespace]` | One journal's history, rebuilt from its memories: picks, outcomes, bias patterns, credibility. Identity and probe namespaces are refused with `404`.                           |
 
 ### Journal pages
 
@@ -1003,8 +1047,8 @@ and the footer.
 | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `/dashboard`       | Dashboard: pick stats, a seller panel with settled earnings and own verification counts, credibility leaderboard, latest commitments, the most recent memory-driven decision with its cited blob ids, and a live settlement feed built from Tatum transaction events. |
 | `/onboarding`      | Claims a handle by proving a wallet by signature, then reveals the 24-symbol recovery code **once**, behind a checkbox that must be ticked before entering.                                                                                                           |
-| `/resume`          | Restores a session by signing with the bound wallet, or with handle + recovery code as a fallback. Accepts the code in any case or grouping.                                                                                                                          |
-| `/settings/wallet` | Binds a wallet to a journal created before wallet auth existed. One-way: a bound address cannot be replaced.                                                                                                                                                          |
+| `/resume`          | Restores a session from the recovery code alone. Accepts the code in any case or grouping; no handle is asked for.                                                                                                                                                    |
+| `/settings/wallet` | Read-only. Shows the address that _is_ the journal and how the signature proof works; there is nothing to bind or replace.                                                                                                                                            |
 | `/picks`           | Public ledger plus `?mine=true`. Sealed rows show only hash and timestamp to non-owners.                                                                                                                                                                              |
 | `/picks/new`       | Two-step flow: ask memory first (recommendation), then commit the sealed pick.                                                                                                                                                                                        |
 | `/picks/[id]`      | Proof detail: commitment hash, whether the stored payload still matches, reveal/resolve actions for the owner only, and the resolution with its source URL.                                                                                                           |
@@ -1017,31 +1061,30 @@ and the footer.
 
 ### Routes
 
-| Route                           | Auth                   | Notes                                                                              |
-| ------------------------------- | ---------------------- | ---------------------------------------------------------------------------------- |
-| `GET /api/session`              | optional               | Current user plus `hasRecovery`.                                                   |
-| `PUT /api/session`              | origin-checked         | Issue a single-use challenge for claim, login or bind.                             |
-| `POST /api/session`             | origin-checked         | Claim a handle with the wallet signature; returns the code once, `201`.            |
-| `POST /api/session/wallet`      | origin-checked         | Sign in with the wallet already bound to a journal.                                |
-| `POST /api/session/wallet/bind` | origin-checked         | Bind a wallet to an existing journal; one-way, `409` if already bound.             |
-| `PATCH /api/session`            | origin-checked, 10/min | Resume with handle + code.                                                         |
-| `DELETE /api/session`           | origin-checked         | Log out.                                                                           |
-| `GET /api/picks`                | optional               | Feed, `?mine=true`, redacted per viewer.                                           |
-| `POST /api/picks`               | session                | Seal a pick; rolls back on memory failure.                                         |
-| `GET /api/picks/[id]`           | optional               | Single pick, redacted per viewer.                                                  |
-| `POST /api/picks/[id]/reveal`   | owner                  | Hash + time-lock checked.                                                          |
-| `POST /api/picks/[id]/resolve`  | owner                  | Oracle consulted when the pick carries a fixture ref; `201`.                       |
-| `GET /api/oracle/fixtures`      | session                | Fixtures for one league/date so a picker can link a real match.                    |
-| `GET /api/analysts`             | public                 | Leaderboard.                                                                       |
-| `POST /api/analysts`            | session                | Create an analyst; duplicate → `409`.                                              |
-| `POST /api/recommendations`     | session                | Recall before deciding; persists citations; `201`.                                 |
-| `POST /api/memory/preferences`  | session                | Write a preference memory; `201` with a blob id.                                   |
-| `GET /api/signals`              | public                 | Marketplace; only fee-verified listings appear.                                    |
-| `POST /api/signals`             | wallet proof, 10/min   | Validate body, then x402 listing fee, then publish; `403` without a proven wallet. |
-| `GET /api/signals/[id]`         | x402 payment, 30/min   | Paywall; Tatum verification before release.                                        |
-| `GET /api/payments`             | public                 | Ledger plus merchant balance and events.                                           |
-| `POST /api/payments/verify`     | origin-checked, 10/min | Read-only digest check; never inserts.                                             |
-| `GET /api/health`               | public                 | Database + Walrus + Tatum; `503` if any fails; no secrets.                         |
+| Route                          | Auth                   | Notes                                                                              |
+| ------------------------------ | ---------------------- | ---------------------------------------------------------------------------------- |
+| `GET /api/session`             | optional               | Current journal plus `hasRecovery`.                                                |
+| `PUT /api/session`             | origin-checked         | Issue a single-use challenge for claim or login.                                   |
+| `POST /api/session`            | origin-checked         | Claim a handle with the wallet signature; returns the code once, `201`.            |
+| `POST /api/session/wallet`     | origin-checked         | Sign in by proving the wallet; the address _is_ the journal.                       |
+| `PATCH /api/session`           | origin-checked, 10/min | Resume with the recovery code alone.                                               |
+| `DELETE /api/session`          | origin-checked         | Log out.                                                                           |
+| `GET /api/picks`               | optional               | Feed, `?mine=true`, redacted per viewer.                                           |
+| `POST /api/picks`              | session                | Seal a pick; rolls back on memory failure.                                         |
+| `GET /api/picks/[id]`          | optional               | Single pick, redacted per viewer.                                                  |
+| `POST /api/picks/[id]/reveal`  | owner                  | Hash + time-lock checked.                                                          |
+| `POST /api/picks/[id]/resolve` | owner                  | Oracle consulted when the pick carries a fixture ref; `201`.                       |
+| `GET /api/oracle/fixtures`     | session                | Fixtures for one league/date so a picker can link a real match.                    |
+| `GET /api/analysts`            | public                 | Leaderboard.                                                                       |
+| `POST /api/analysts`           | session                | Create an analyst; duplicate → `409`.                                              |
+| `POST /api/recommendations`    | session                | Recall before deciding; persists citations; `201`.                                 |
+| `POST /api/memory/preferences` | session                | Write a preference memory; `201` with a blob id.                                   |
+| `GET /api/signals`             | public                 | Marketplace; only fee-verified listings appear.                                    |
+| `POST /api/signals`            | wallet proof, 10/min   | Validate body, then x402 listing fee, then publish; `403` without a proven wallet. |
+| `GET /api/signals/[id]`        | x402 payment, 30/min   | Paywall; Tatum verification before release.                                        |
+| `GET /api/payments`            | public                 | Ledger plus merchant balance and events.                                           |
+| `POST /api/payments/verify`    | origin-checked, 10/min | Read-only digest check; never inserts.                                             |
+| `GET /api/health`              | public                 | Database + Walrus + Tatum; `503` if any fails; no secrets.                         |
 
 ### The three journeys that matter
 
@@ -1059,7 +1102,7 @@ and the footer.
 **B. Sell a signal, then buy one (money involved, self-custody).**
 
 ```txt
-/settings/wallet → sign once to bind a payout address (one-way)
+/settings/wallet → shows the address that is the journal (nothing to bind)
 /signals         → publish a signal → sign the flat listing fee
                  → facilitator settles → Tatum verifies the digest
                  → listing becomes visible with the seller's wallet as payee
@@ -1117,7 +1160,7 @@ What is **not** unit tested, and how it is covered instead:
 - Route handlers, use-cases and SQL → verified by hand against a live instance, and the exact
   results are recorded in `README.md` (journey table) and `docs/INTEGRATIONS.md`.
 - Walrus, Tatum and the results oracle → covered by the `verify:*` scripts against mainnet.
-- Wallet claim/login/bind → exercised against a live server with a generated Ed25519 keypair;
+- Wallet claim/login → exercised against a live server with a generated Ed25519 keypair;
   the signature primitive itself is unit tested, including the malformed-input regression.
 - UI → covered by manual checks: server-rendered markup present, real `404`s, wallet connect
   in a real browser, verified badge on an oracle-confirmed outcome.
@@ -1165,9 +1208,9 @@ gates are documented in the README Status table and were all run before submissi
 | Tatum down on `/payments`                    | Page renders with `balance: unavailable` and no substitute feed         | 200       |
 | x402 facilitator unreachable                 | `UPSTREAM_UNAVAILABLE`; no payment is recorded                          | 502       |
 | Listing price below the gasless floor        | Startup refuses the configuration                                       | exit 1    |
-| Publish without a proven wallet              | Refused; caller is signed in but has no payout address                  | 403       |
+| Publish from a legacy uuid journal           | Refused; it has no wallet to be paid at                                 | 403       |
 | Invalid listing body                         | Rejected before settlement; no listing fee is taken                     | 400       |
-| Login or bind proof names another address    | Refused before the lookup or update                                     | 401       |
+| Login proof names another address            | Refused before the lookup                                               | 401       |
 | Oracle contradicts a claimed win             | Stored as `oracle_contradicted`, owner's claim preserved                | 201       |
 | Claimed `void` on a completed fixture        | Stored as `oracle_contradicted`; no free pass to verified               | 201       |
 | `ORACLE_ENABLED=false` at resolve time       | Stored as `self_attested` with a configuration reason                   | 201       |
@@ -1213,18 +1256,20 @@ substitutes sample data, a cached success, or a placeholder row.
 
 ## 17. Glossary
 
-| Term                | Meaning in Saksi                                                                 |
-| ------------------- | -------------------------------------------------------------------------------- |
-| **Journal**         | One identity (`users` row) with its own Walrus namespace.                        |
-| **Pick**            | A prediction committed before an event, identified by a hash.                    |
-| **Commitment hash** | `sha256(canonicalJson(payload))`. Proves the pick existed and was not edited.    |
-| **Sealed**          | Committed but not yet revealed. Content visible only to the owner.               |
-| **Reveal**          | Recompute the hash and publish the content if it still matches.                  |
-| **Resolve**         | Attach a result, a source URL and a timestamp; compute the Brier score.          |
-| **Credibility**     | Recency-weighted, Wilson-shrunk score from 0 to 100.                             |
-| **Bias pattern**    | Repeated losing behaviour, written to memory and cited in later recommendations. |
-| **Source ROI**      | Did the premium data I paid for improve my results?                              |
-| **Memory kind**     | One of the eight validated `saksi:v1` record types.                              |
-| **Namespace**       | `${prefix}:${userId}` — the isolation boundary inside Walrus Memory.             |
-| **Citation**        | `{ blobId, text, distance }` for a memory that actually influenced a decision.   |
-| **Settlement**      | The on-chain x402 payment, verified through Tatum before data is released.       |
+| Term                | Meaning in Saksi                                                                         |
+| ------------------- | ---------------------------------------------------------------------------------------- |
+| **Journal**         | One Sui address that proved ownership, with its own Walrus namespace.                    |
+| **Ref**             | A journal's identity string: a lowercase Sui address, or a uuid for pre-`0007` journals. |
+| **Handle**          | A display name stored in Walrus. Not unique and not an identifier.                       |
+| **Pick**            | A prediction committed before an event, identified by a hash.                            |
+| **Commitment hash** | `sha256(canonicalJson(payload))`. Proves the pick existed and was not edited.            |
+| **Sealed**          | Committed but not yet revealed. Content visible only to the owner.                       |
+| **Reveal**          | Recompute the hash and publish the content if it still matches.                          |
+| **Resolve**         | Attach a result, a source URL and a timestamp; compute the Brier score.                  |
+| **Credibility**     | Recency-weighted, Wilson-shrunk score from 0 to 100.                                     |
+| **Bias pattern**    | Repeated losing behaviour, written to memory and cited in later recommendations.         |
+| **Source ROI**      | Did the premium data I paid for improve my results?                                      |
+| **Memory kind**     | One of the ten validated `saksi:v1` record types.                                        |
+| **Namespace**       | `${prefix}:${ref}` — the isolation boundary inside Walrus Memory.                        |
+| **Citation**        | `{ blobId, text, distance }` for a memory that actually influenced a decision.           |
+| **Settlement**      | The on-chain x402 payment, verified through Tatum before data is released.               |

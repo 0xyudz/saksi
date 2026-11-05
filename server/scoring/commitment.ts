@@ -2,6 +2,12 @@ import { commitmentHash } from "@/lib/canonical";
 import type { PickPayload } from "@/lib/domain";
 
 export interface CommitmentInput {
+  /**
+   * The owning journal's ref. Named `userId` because it is inside the hashed payload: this
+   * field was committed to before identity moved to the wallet, so renaming it would change
+   * the canonical JSON and invalidate every commitment already sealed. The value is a ref
+   * (wallet address, or a legacy uuid), not necessarily a uuid.
+   */
   readonly userId: string;
   readonly analystId: string;
   readonly eventRef: string;

@@ -8,6 +8,7 @@ import {
   parseQuery,
 } from "@/lib/http";
 import { optionalApiUserId, requireApiUserId } from "@/server/auth";
+import { labelForRef, readJournalHandles } from "@/server/data/journal";
 import { recentPicks } from "@/server/data/picks";
 import { presentPick } from "@/server/presenters/pick";
 import { createPick, createPickSchema } from "@/server/usecases/create-pick";
@@ -32,6 +33,7 @@ export async function GET(request: Request): Promise<Response> {
     }
 
     const feed = await recentPicks(query.limit, mine ? viewerId : undefined);
+    const handles = await readJournalHandles(feed.map((item) => item.journalRef));
     const now = new Date();
 
     return jsonResponse(
@@ -40,7 +42,7 @@ export async function GET(request: Request): Promise<Response> {
           presentPick({
             pick: item.pick,
             viewerId,
-            ownerHandle: item.userHandle,
+            ownerHandle: labelForRef(item.journalRef, handles),
             analystName: item.analystName,
             analystKind: item.analystKind,
             outcome:

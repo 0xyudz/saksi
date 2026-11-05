@@ -36,7 +36,7 @@ export async function GET(request: Request): Promise<Response> {
         signals: items.map((item) => ({
           id: item.signal.id,
           provider: item.signal.provider,
-          sellerHandle: item.sellerHandle,
+          sellerWallet: item.sellerWallet,
           title: item.signal.title,
           priceAtomic: item.signal.priceAtomic.toString(),
           priceUsd: formatAtomic(item.signal.priceAtomic),

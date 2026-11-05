@@ -6,10 +6,10 @@ import { clearSession, getSessionUser, startSession } from "@/lib/session";
 import {
   claimJournal,
   claimJournalSchema,
+  resumeJournal,
   resumeSchema,
-  resumeUser,
-  type CreatedUser,
-} from "@/server/data/users";
+  type CreatedJournal,
+} from "@/server/data/journal";
 import { issueWalletChallenge, WALLET_CHALLENGE_PURPOSES } from "@/server/wallet-auth";
 
 export const dynamic = "force-dynamic";
@@ -60,26 +60,30 @@ export async function PUT(request: Request): Promise<Response> {
 }
 
 /**
- * Creates a journal from a proven wallet. The recovery code is returned exactly once and
- * is the only fallback if the wallet is later lost.
+ * Creates a journal from a proven wallet.
+ *
+ * Nothing is registered, so there is no conflict to report: the wallet is the key and the
+ * handle is a display name. The recovery code is returned exactly once and is the only
+ * fallback if the wallet is later lost.
  */
 export async function POST(request: Request): Promise<Response> {
   return handleRoute(request, async ({ requestId }) => {
     assertSessionOrigin(request);
     assertWithinRateLimit(request, "session:claim", 10, 60_000);
     const input = await parseJsonBody(request, claimJournalSchema);
-    const created: CreatedUser = await claimJournal(input);
-    await startSession(created.user.id);
+    const created: CreatedJournal = await claimJournal(input);
+    await startSession(created.journal.ref);
 
     return jsonResponse(
       {
         user: {
-          id: created.user.id,
-          handle: created.user.handle,
-          walletAddress: created.user.walletAddress,
+          id: created.journal.ref,
+          handle: created.journal.handle,
+          walletAddress: created.journal.walletAddress,
         },
         // Shown once. There is no endpoint that can reveal it again, by design.
         recoveryCode: created.recoveryCode,
+        receipts: created.receipts,
       },
       requestId,
       { status: 201 },
@@ -87,18 +91,18 @@ export async function POST(request: Request): Promise<Response> {
   });
 }
 
-/** Resumes an existing journal with its handle and recovery code. */
+/** Resumes an existing journal with its recovery code. */
 export async function PATCH(request: Request): Promise<Response> {
   return handleRoute(request, async ({ requestId }) => {
     assertSessionOrigin(request);
     assertWithinRateLimit(request, "session:resume", 10, 60_000);
     const input = await parseJsonBody(request, resumeSchema);
-    const user = await resumeUser(input);
-    await startSession(user.id);
+    const journal = await resumeJournal(input);
+    await startSession(journal.ref);
 
     return jsonResponse(
       {
-        user: { id: user.id, handle: user.handle, walletAddress: user.walletAddress },
+        user: { id: journal.ref, handle: journal.handle, walletAddress: journal.walletAddress },
       },
       requestId,
     );

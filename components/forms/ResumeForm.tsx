@@ -10,9 +10,15 @@ const responseSchema = z
   .object({ user: z.object({ id: z.string(), handle: z.string() }).loose() })
   .loose();
 
+/**
+ * Recovery asks for the code only.
+ *
+ * The code is the key: its digest names the namespace that holds the journal pointer, so a
+ * handle is not needed and would not help — handles are display names now and may be shared,
+ * which means they cannot select a journal.
+ */
 export function ResumeForm() {
   const router = useRouter();
-  const [handle, setHandle] = useState("");
   const [recoveryCode, setRecoveryCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -25,7 +31,7 @@ export function ResumeForm() {
       await requestJson({
         url: "/api/session",
         method: "PATCH",
-        body: { handle: handle.trim(), recoveryCode },
+        body: { recoveryCode },
         schema: responseSchema,
       });
       router.push("/picks");
@@ -39,27 +45,6 @@ export function ResumeForm() {
 
   return (
     <form onSubmit={onSubmit} className="space-y-4">
-      <div>
-        <label className="label" htmlFor="resume-handle">
-          Journal handle
-        </label>
-        <div className="flex items-center gap-2">
-          <span className="mono text-muted text-sm">@</span>
-          <input
-            id="resume-handle"
-            className="input"
-            value={handle}
-            onChange={(event) => setHandle(event.target.value)}
-            placeholder="saksi_reader"
-            minLength={3}
-            maxLength={24}
-            pattern="[a-z0-9_]+"
-            autoComplete="username"
-            required
-          />
-        </div>
-      </div>
-
       <div>
         <label className="label" htmlFor="resume-code">
           Recovery code
@@ -75,7 +60,8 @@ export function ResumeForm() {
           required
         />
         <p className="text-muted mt-2 text-xs leading-relaxed">
-          Dashes, spaces and lowercase are ignored, so you can paste it exactly as you saved it.
+          Dashes, spaces and lowercase are ignored, so you can paste it exactly as you saved it. No
+          handle is needed: the code itself names your journal.
         </p>
       </div>
 

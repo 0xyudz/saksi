@@ -18,13 +18,13 @@ export interface RevealedPick {
   readonly revealMemoryBlobId: string | null;
 }
 
-export async function revealPick(userId: string, pickId: string): Promise<RevealedPick> {
+export async function revealPick(journalRef: string, pickId: string): Promise<RevealedPick> {
   const db = getDb();
   const rows = await db.select().from(picks).where(eq(picks.id, pickId)).limit(1);
   const pick = rows[0];
 
   if (!pick) throw new AppError("NOT_FOUND", "Pick not found.");
-  if (pick.userId !== userId) {
+  if (pick.journalRef !== journalRef) {
     throw new AppError("FORBIDDEN", "Only the owner of a pick can reveal it.");
   }
 
@@ -66,7 +66,7 @@ export async function revealPick(userId: string, pickId: string): Promise<Reveal
   let revealMemoryBlobId: string | null = null;
   try {
     const write = await remember(
-      userId,
+      journalRef,
       buildPickRevealMemory({
         id: revealed.id,
         selection: revealed.selection,
