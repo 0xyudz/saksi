@@ -43,7 +43,11 @@ export default async function MemoryPage({
             detail={
               ledger.page.truncated
                 ? "listMemories() stopped at the 50-page cap"
-                : "fetched by listMemories(), not a namespace total"
+                : ledger.page.stalled
+                  ? "the relayer kept rejecting its cursor; count may be short"
+                  : ledger.page.resynced
+                    ? "a stale cursor was reset; pages re-read from the start"
+                    : "fetched by listMemories(), not a namespace total"
             }
             tone="amber"
           />

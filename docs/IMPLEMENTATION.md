@@ -563,8 +563,25 @@ MemWal.create({ key, accountId, serverUrl, namespace: prefix });
 ${WALRUS_MEMORY_NAMESPACE_PREFIX}:${userId}
 ```
 
-Per-journal isolation is done by namespace, not by filtering after recall. One journal cannot
-recall another journal's memories even if it asks for them.
+Per-journal separation is done by namespace, not by filtering after recall: every read passes
+the journal's own namespace, so one journal's query never returns another's memories.
+
+**That is separation, not authorisation.** The official Walrus Memory docs are explicit that
+"a namespace organizes data. It is not an onchain authorization boundary. Every delegate key is
+authorized for the whole MemWal account, so a delegate assigned to one agent can still request
+another namespace's Seal key." Saksi runs one MemWal account, so the delegate key in the server
+environment can read every namespace under `saksi:`. Isolation therefore rests on application
+code, not on Walrus: no API route accepts a namespace from the caller, and the only public
+reader (`/journals/<namespace>`) refuses anything outside this deployment's prefix and refuses
+the identity namespaces.
+
+Two consequences worth stating plainly:
+
+- The public journal page is public by design. Anyone with the ref can read that journal's
+  memories, which is what makes a track record auditable. It is not a private store.
+- Using a separate MemWal account per user would move this boundary onchain, but it would also
+  mean the app cannot read a journal without that user's key — which defeats reconstructing a
+  record from Walrus alone. The single account is a deliberate trade, not an oversight.
 
 ### 6.3 The `saksi:v1` text format
 

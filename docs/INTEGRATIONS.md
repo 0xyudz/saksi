@@ -43,12 +43,13 @@ MemWal.create({
 
 **Calls used:**
 
-| Method                                                   | Where                                         | Purpose                                                   |
-| -------------------------------------------------------- | --------------------------------------------- | --------------------------------------------------------- |
-| `health()`                                               | `/api/health`, `/memory`, verification script | relayer reachability and version                          |
-| `rememberAndWait(text, namespace)`                       | `remember()`                                  | wait for the real blob/job result before claiming a write |
-| `recall({ query, limit, namespace, sort: "relevance" })` | recommendations, `/memory` search             | return decrypted text plus cosine distance                |
-| `listMemories({ namespace, cursor, limit })`             | `/memory`                                     | count and list memories from the relayer, not Postgres    |
+| Method                                                   | Where                                             | Purpose                                                   |
+| -------------------------------------------------------- | ------------------------------------------------- | --------------------------------------------------------- |
+| `health()`                                               | `/api/health`, `/memory`, verification script     | relayer reachability and version                          |
+| `rememberAndWait(text, namespace)`                       | `remember()`                                      | wait for the real blob/job result before claiming a write |
+| `recall({ query, limit, namespace, sort: "relevance" })` | recommendations, `/memory` search, reconstruction | return decrypted text plus cosine distance                |
+| `listMemories({ namespace, cursor, limit })`             | `/memory`, `/journals/<namespace>`                | exact count and listing, including `must_resync` handling |
+| `listNamespaces({ cursor, limit })`                      | `/journals`, verification script                  | enumerate journals and their memory counts                |
 
 `rememberAndWait()` returns `{ id, job_id, blob_id, owner, namespace }`; Saksi keeps
 `result.blob_id` as the receipt it shows the caller. There is no `memory_writes` table any
@@ -90,6 +91,28 @@ The namespace is `${WALRUS_MEMORY_NAMESPACE_PREFIX}:${userId}`. Recall uses
 `sort: "relevance"` and `limit` from `WALRUS_RECALL_LIMIT` (default 10). Every warning
 in a recommendation stores the exact memory `text`, `blobId` and `distance` that caused
 it; the UI renders those values rather than a computed score alone.
+
+Two documented behaviours shape how this is used, and getting either wrong produces numbers
+that look right and are not:
+
+- **`recall()` is a similarity search, not an enumeration.** The docs state that ranking
+  happens server-side before `limit` truncates, so a memory can be absent from the result set
+  entirely — not merely sorted low. Counting a namespace with `recall()` is therefore unsound.
+  `listMemories()` is the documented tool for an exact count, and `/journals/<namespace>` and
+  `/memory` use it for that. Reconstruction still calls `recall()`, because it needs the text
+  of the memories matching its query, and it reports `recalled` / `possiblyTruncated` rather
+  than a total. Measured on this deployment, `recall(limit 100)` and `listMemories()` agreed
+  on all three journals sampled (24/24, 7/7, 12/12) because every namespace is far below the
+  cap; that agreement is a property of the current data, not a guarantee of the call.
+- **A namespace is not an authorisation boundary.** The docs are explicit: every delegate key
+  is authorised for the whole MemWal account, so a delegate can request another namespace.
+  Saksi runs one MemWal account, so isolation between journals is enforced by application code
+  (no route takes a namespace from the caller) rather than by Walrus. See
+  `docs/IMPLEMENTATION.md` §6.2.
+
+`listMemories()` pagination also carries `must_resync`, which means the cursor is too old and
+the walk must restart without one. Ignoring it returns a short page that looks complete, so
+`nextListStep()` resets once, then reports `stalled` instead of looping.
 
 ### Failure policy
 

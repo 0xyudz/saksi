@@ -16,7 +16,7 @@ Built for **Total Recall — Tatum × Walrus Memory** (Track 1: Markets & Sports
 | ------------------------------------- | ---------------------------------------------------------------------------- |
 | `pnpm typecheck`                      | passes                                                                       |
 | `pnpm lint`                           | passes                                                                       |
-| `pnpm test`                           | 170 tests pass across 19 files                                               |
+| `pnpm test`                           | 175 tests pass across 20 files                                               |
 | `pnpm build`                          | passes (Next.js 16.4.3, Turbopack)                                           |
 | Migrations applied to a live database | yes — 7 tables on a live Postgres instance (`0000`–`0007`)                   |
 | Walrus Memory (mainnet relayer)       | verified — `pnpm verify:memory` writes, recalls and lists real blobs         |
@@ -532,6 +532,27 @@ run writes one more `preference` memory, so that count grows by one per run.
 
 ## Known limitations and risks
 
+- **Journal separation is enforced by application code, not by Walrus.** The official docs
+  state that a namespace "is not an onchain authorization boundary" and that every delegate key
+  is authorised for the whole MemWal account. Saksi uses one MemWal account, so the delegate key
+  in the server environment can read every `saksi:` namespace. No API route accepts a namespace
+  from the caller, and the public reader refuses anything outside this deployment's prefix — but
+  that is code, not a cryptographic boundary. Separate MemWal accounts per user would move the
+  boundary onchain and would also stop the app from reconstructing a journal from Walrus alone.
+- **`recall()` is a similarity search, not an enumeration.** The docs say ranking happens
+  server-side before `limit` truncates, so a memory can be missing from the result set entirely.
+  Exact counts therefore use `listMemories()`; reconstruction uses `recall()` and reports
+  `recalled` / `possiblyTruncated` instead of a total.
+- **Walrus Memory features this build does not use:** `analyze()` (fact extraction), `restore()`
+  (rebuild a namespace index from Walrus), `rememberBulk()`, and the AI middleware
+  (`withMemWal`). Each would need a product decision rather than a call-site change, so they are
+  listed here instead of being implied by the word "integration".
+- **The relayer sees plaintext.** With the default client, encryption, embedding and upload all
+  happen server-side at the relayer. `MemWalManual` would keep embedding and Seal encryption
+  local; Saksi uses the default client, so it trusts the relayer with memory contents. Nothing
+  in this app claims end-to-end confidentiality.
+- **A public journal page is public by design.** Anyone holding the ref can read that journal's
+  memories, which is what makes a track record auditable. It is not a private store.
 - One catalogue listing (`426fb368-…`, "matchweek 12") is priced at `$0.01`, below the `$0.02`
   listing fee, and it was published before `publishSignal()` refused that. It is still visible
   and still purchasable, and a sale at that price returns less than the seller paid to list

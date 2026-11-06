@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { EmptyState, Hash, PageHeader, StatCard } from "@/components/ui";
-import { recallNamespace } from "@/integrations/walrus-memory/client";
+import { listMemories, recallNamespace } from "@/integrations/walrus-memory/client";
 import { JOURNAL_MEMORY_KINDS, parseMemory } from "@/integrations/walrus-memory/schema";
 import { formatDateTime } from "@/lib/format";
 import { getEnv } from "@/lib/env";
@@ -40,6 +40,13 @@ export default async function JournalDetailPage({ params, searchParams }: PagePr
   const journal = await reconstructJournal(namespace);
   const analysts = analystsFromJournal(journal);
 
+  /*
+   * The exact count comes from `listMemories()`, not from the reconstruction. `recall()` is a
+   * similarity search ranked server-side before its limit truncates, so it is the wrong tool
+   * for "how many memories are there" - the official docs say so explicitly. Reconstruction
+   * still uses recall, because it needs the text of the memories that match its query.
+   */
+  const exact = await listMemories(namespace.slice(namespace.indexOf(":") + 1), 500);
   const listing = await recallNamespace(namespace, NEUTRAL_QUERY, 100);
   const searched = query.length > 0 ? await recallNamespace(namespace, query, 100) : null;
 
@@ -71,9 +78,9 @@ export default async function JournalDetailPage({ params, searchParams }: PagePr
       <div className="container-page pb-20">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard
-            label="Memories returned"
-            value={journal.recalled}
-            detail="recall() with a neutral query, limit 100"
+            label="Memories in this namespace"
+            value={exact.fetched}
+            detail="listMemories() pages, exact count"
             tone="amber"
           />
           <StatCard
