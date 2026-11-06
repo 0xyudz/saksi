@@ -100,6 +100,29 @@ export interface JournalRecordLike {
 }
 
 /**
+ * How many candidates an identity lookup must recall to be able to see the oldest record.
+ *
+ * `recall()` is a similarity search: the relayer selects the cosine top-`limit` and only then
+ * orders the result, so a record outside that window cannot be recovered by any later step.
+ * Picking the oldest of a fixed 20-candidate window would therefore be "oldest of the twenty
+ * most similar", which is a different and wrong answer once a namespace holds more records.
+ *
+ * The window is derived from the exact record count instead, with a floor of 20 for margin
+ * against a briefly stale index, and capped at 100 because the relayer refuses more.
+ */
+export const IDENTITY_RECALL_FLOOR = 20;
+export const IDENTITY_RECALL_CAP = 100;
+
+export function identityRecallWindow(recordCount: number): number {
+  return Math.min(Math.max(recordCount, IDENTITY_RECALL_FLOOR), IDENTITY_RECALL_CAP);
+}
+
+/** True when the record count exceeds what one recall can see, so "oldest" is unprovable. */
+export function identityWindowComplete(recordCount: number): boolean {
+  return recordCount <= IDENTITY_RECALL_CAP;
+}
+
+/**
  * Picks the identity record that a wallet should resolve to.
  *
  * A wallet is supposed to have exactly one, and `claimJournal` now refuses a second claim so
@@ -111,6 +134,9 @@ export interface JournalRecordLike {
  * The oldest record wins. A journal's identity was established at its first claim, and every
  * later record is a duplicate. `createdAt` is ISO-8601, so comparing it as a string is
  * chronological.
+ *
+ * This selector is only correct over the *complete* set of records; the caller is responsible
+ * for widening the recall window to the real count (see `identityRecallWindow`).
  *
  * Kept pure and separate from the relayer so the ordering rule is unit tested.
  */

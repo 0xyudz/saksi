@@ -3,7 +3,13 @@ import { MemWal } from "@mysten-incubation/memwal";
 import type { MemoryCitation } from "@/lib/domain";
 import { getEnv } from "@/lib/env";
 import { AppError } from "@/lib/errors";
-import { oldestJournalRecord, recoveryNamespace, walletNamespace } from "@/lib/journal-identity";
+import {
+  identityRecallWindow,
+  identityWindowComplete,
+  oldestJournalRecord,
+  recoveryNamespace,
+  walletNamespace,
+} from "@/lib/journal-identity";
 import {
   buildJournalMemory,
   buildPreferenceMemory,
@@ -74,9 +80,27 @@ export function userNamespace(ref: string): string {
   return namespaceFor(getEnv().WALRUS_MEMORY_NAMESPACE_PREFIX, ref);
 }
 
-export async function health(): Promise<{ status: string; version: string }> {
+export interface MemoryHealth {
+  readonly status: string;
+  readonly version: string;
+  /**
+   * Whether the relayer is currently accepting writes.
+   *
+   * `null` means the relayer did not report it, which is not the same as `false`: an older
+   * relayer that omits the field must not be reported as broken. Kept because a relayer can
+   * answer reads while refusing writes, and in this app a refused write means a pick cannot
+   * be sealed at all - so a health check that only proves reads is not a health check.
+   */
+  readonly writeReady: boolean | null;
+}
+
+export async function health(): Promise<MemoryHealth> {
   const result = await getMemoryClient().health();
-  return { status: result.status, version: result.version };
+  return {
+    status: result.status,
+    version: result.version,
+    writeReady: result.write_ready ?? null,
+  };
 }
 
 /**
@@ -140,7 +164,16 @@ export async function readJournalRecord(wallet: string): Promise<{
   createdAt: string;
 } | null> {
   const namespace = walletNamespace(getEnv().WALRUS_MEMORY_NAMESPACE_PREFIX, wallet);
-  const { hits } = await recallNamespace(namespace, "journal identity handle", 20);
+
+  /*
+   * The window is sized from the exact record count, not a constant. `recall()` truncates to
+   * its `limit` before ordering, so a fixed window would answer "oldest of the most similar
+   * N" instead of "oldest". `listMemories()` is the documented way to count, and it is one
+   * extra call on a path that runs at login rather than per pick.
+   */
+  const listing = await listMemories(wallet, 100);
+  const window = identityRecallWindow(listing.fetched);
+  const { hits } = await recallNamespace(namespace, "journal identity handle", window);
 
   const records = hits
     .map((hit) => hit.memory)
@@ -148,6 +181,18 @@ export async function readJournalRecord(wallet: string): Promise<{
       (memory): memory is Extract<NonNullable<typeof memory>, { kind: "journal" }> =>
         memory !== null && memory.kind === "journal",
     );
+
+  /*
+   * Refuse to guess when the namespace is larger than one recall can see. Returning a
+   * possibly-wrong journal is worse than returning none: the caller would resolve a session
+   * to the wrong namespace, and Walrus cannot be corrected afterwards.
+   */
+  if (!identityWindowComplete(listing.fetched) && records.length < listing.fetched) {
+    throw new AppError(
+      "UPSTREAM_UNAVAILABLE",
+      "Journal identity namespace is too large to resolve deterministically.",
+    );
+  }
 
   const oldest = oldestJournalRecord(records);
   if (oldest === null) return null;
@@ -358,10 +403,22 @@ export async function listMemories(ref: string, pageSize = 100): Promise<MemoryP
   return { memories, fetched: memories.length, hasMore, truncated, resynced, stalled };
 }
 
+/**
+ * Fails when the relayer cannot accept writes.
+ *
+ * This is deliberately not wired into any write path: `remember()` already fails loudly when a
+ * write is refused, and a pre-flight check would only add a round trip before every memory. It
+ * exists so `/api/health` and the verification scripts can state the write path's condition
+ * instead of inferring it from a successful read.
+ */
 export async function assertMemoryReachable(): Promise<void> {
   try {
-    await health();
+    const result = await health();
+    if (result.writeReady === false) {
+      throw new AppError("UPSTREAM_UNAVAILABLE", "Walrus Memory relayer is not accepting writes.");
+    }
   } catch (error) {
+    if (error instanceof AppError) throw error;
     throw new AppError("UPSTREAM_UNAVAILABLE", "Walrus Memory relayer is not reachable.", {
       cause: error,
     });

@@ -3,6 +3,7 @@ import {
   listMemories,
   recall,
   rememberPreference,
+  type MemoryHealth,
   type MemoryPage,
   type RecalledMemoryHit,
   type RememberedMemory,
@@ -21,7 +22,7 @@ export interface MemoryLedgerEntry {
 
 export interface MemoryLedger {
   readonly page: MemoryPage;
-  readonly health: { status: string; version: string };
+  readonly health: MemoryHealth;
   /** Blob metadata joined with the text `recall()` returns, newest first. */
   readonly entries: ReadonlyArray<MemoryLedgerEntry>;
   /** Distinct memory kinds actually present in this namespace. */
@@ -70,7 +71,28 @@ export async function memoryLedger(userId: string): Promise<MemoryLedger> {
   return { page, health: runtime, entries, kinds };
 }
 
-export async function memoryHealth(): Promise<{ status: string; version: string }> {
+/**
+ * Decides whether a relayer that answered `health()` is usable for this app.
+ *
+ * Pure so the rule is testable without a relayer. `writeReady === null` means the relayer did
+ * not report the field at all, which is not evidence of a fault; only an explicit `false` is.
+ * This distinction matters because a paused write path fails every pick sealing while reads
+ * keep succeeding, so a read-only health check would call that state "ok".
+ */
+export function relayerUsable(input: {
+  readonly reachable: boolean;
+  readonly writeReady: boolean | null;
+}): { readonly ok: boolean; readonly reason: "unreachable" | "writes_refused" | "ok" } {
+  if (!input.reachable) return { ok: false, reason: "unreachable" };
+  if (input.writeReady === false) return { ok: false, reason: "writes_refused" };
+  return { ok: true, reason: "ok" };
+}
+
+export async function memoryHealth(): Promise<{
+  status: string;
+  version: string;
+  writeReady: boolean | null;
+}> {
   return health();
 }
 

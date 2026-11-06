@@ -45,7 +45,7 @@ MemWal.create({
 
 | Method                                                   | Where                                             | Purpose                                                   |
 | -------------------------------------------------------- | ------------------------------------------------- | --------------------------------------------------------- |
-| `health()`                                               | `/api/health`, `/memory`, verification script     | relayer reachability and version                          |
+| `health()`                                               | `/api/health`, `/memory`, verification script     | relayer reachability, version **and `write_ready`**       |
 | `rememberAndWait(text, namespace)`                       | `remember()`                                      | wait for the real blob/job result before claiming a write |
 | `recall({ query, limit, namespace, sort: "relevance" })` | recommendations, `/memory` search, reconstruction | return decrypted text plus cosine distance                |
 | `listMemories({ namespace, cursor, limit })`             | `/memory`, `/journals/<namespace>`                | exact count and listing, including `must_resync` handling |
@@ -113,6 +113,29 @@ that look right and are not:
 `listMemories()` pagination also carries `must_resync`, which means the cursor is too old and
 the walk must restart without one. Ignoring it returns a short page that looks complete, so
 `nextListStep()` resets once, then reports `stalled` instead of looping.
+
+### Identity lookup: why the recall window is computed
+
+`readJournalRecord()` resolves a wallet to its journal by recalling the identity namespace and
+taking the oldest record. That needs care, because `recall()` truncates to `limit` **before**
+ordering: with a fixed window the answer is "oldest of the N most similar", which stops being
+"oldest" as soon as a namespace holds more than N records. The window is therefore sized from
+the exact `listMemories()` count (`identityRecallWindow`, floor 20, cap 100). Past the cap the
+oldest record is no longer provable, so the lookup throws instead of resolving a session to a
+possibly-wrong namespace — Walrus is append-only, so a wrong resolution cannot be undone.
+
+The SDK documents `sort: "recent"` as the tool for newest-wins because it over-fetches before
+ordering. Saksi deliberately does not use it here: `recent` gives the newest, and the rule for
+duplicate identity records is that the _oldest_ wins.
+
+### Health includes the write path
+
+`health()` returns `status`, `version` and `writeReady`. The last one matters because a relayer
+can serve reads while refusing writes, and in Saksi a pick is sealed only if its memory write
+succeeds — so a read-only health check would report "ok" while every sealing attempt failed.
+`/api/health` returns `503 degraded` when `writeReady` is explicitly `false`, and reports
+`walrusWritable` plus `walrusReason` (`ok` / `writes_refused` / `unreachable`). An absent field
+is `null`, not `false`: an older relayer that omits it must not be reported as broken.
 
 ### Failure policy
 

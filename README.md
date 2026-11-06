@@ -16,7 +16,7 @@ Built for **Total Recall — Tatum × Walrus Memory** (Track 1: Markets & Sports
 | ------------------------------------- | ---------------------------------------------------------------------------- |
 | `pnpm typecheck`                      | passes                                                                       |
 | `pnpm lint`                           | passes                                                                       |
-| `pnpm test`                           | 175 tests pass across 20 files                                               |
+| `pnpm test`                           | 185 tests pass across 21 files                                               |
 | `pnpm build`                          | passes (Next.js 16.4.3, Turbopack)                                           |
 | Migrations applied to a live database | yes — 7 tables on a live Postgres instance (`0000`–`0007`)                   |
 | Walrus Memory (mainnet relayer)       | verified — `pnpm verify:memory` writes, recalls and lists real blobs         |
@@ -547,6 +547,15 @@ run writes one more `preference` memory, so that count grows by one per run.
   (rebuild a namespace index from Walrus), `rememberBulk()`, and the AI middleware
   (`withMemWal`). Each would need a product decision rather than a call-site change, so they are
   listed here instead of being implied by the word "integration".
+- **`recall()` cannot be used as an enumeration.** It truncates to `limit` before ordering, so a
+  memory outside the window is not "ranked low", it is absent. Identity lookups therefore size
+  their window from the exact `listMemories()` count, and a namespace holding more records than
+  one recall can see is refused rather than resolved to a guess.
+- **A namespace is not a unit of authorisation or deletion.** Walrus Memory has no per-journal
+  account, no unique constraint, and no way to remove a memory once written. Three consequences
+  are visible in this deployment: `@saksi_dev`'s journal is permanently split across two
+  namespaces by a duplicate claim that predates the `409`, and five `Verification probe: …`
+  memories in `saksi_demo` cannot be deleted. Neither can be repaired, only documented.
 - **The relayer sees plaintext.** With the default client, encryption, embedding and upload all
   happen server-side at the relayer. `MemWalManual` would keep embedding and Seal encryption
   local; Saksi uses the default client, so it trusts the relayer with memory contents. Nothing

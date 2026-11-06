@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  identityRecallWindow,
+  identityWindowComplete,
   isJournalRef,
   isLegacyRef,
   isWalletRef,
@@ -120,5 +122,40 @@ describe("resolving a wallet with duplicate identity records", () => {
       { ref: "b", createdAt: "2026-11-05T16:00:00.000Z" },
     ];
     expect(oldestJournalRecord(records)?.ref).toBe("a");
+  });
+});
+
+/**
+ * The recall window for identity records.
+ *
+ * `recall()` truncates to `limit` *before* the results are ordered, so "oldest of a fixed
+ * 20-candidate window" is not "oldest". These tests pin the window to the real record count,
+ * and pin the boundary at which the answer stops being provable.
+ */
+describe("identityRecallWindow", () => {
+  it("keeps a floor of 20 so a stale index cannot shrink the window below the usual case", () => {
+    expect(identityRecallWindow(1)).toBe(20);
+    expect(identityRecallWindow(0)).toBe(20);
+  });
+
+  it("grows with the record count once it exceeds the floor", () => {
+    expect(identityRecallWindow(37)).toBe(37);
+  });
+
+  it("never asks for more than the relayer's cap of 100", () => {
+    expect(identityRecallWindow(150)).toBe(100);
+  });
+});
+
+describe("identityWindowComplete", () => {
+  it("is complete when every record fits in one recall", () => {
+    expect(identityWindowComplete(100)).toBe(true);
+    expect(identityWindowComplete(2)).toBe(true);
+  });
+
+  it("is incomplete past the cap, where the oldest record is no longer provable", () => {
+    // Past 100 records a single recall cannot see them all, so the selector could pick the
+    // oldest *visible* record and be wrong. The caller refuses rather than guessing.
+    expect(identityWindowComplete(101)).toBe(false);
   });
 });

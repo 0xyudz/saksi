@@ -54,8 +54,14 @@ export default async function MemoryPage({
           <StatCard
             label="Relayer status"
             value={ledger.health.status}
-            detail={`version ${ledger.health.version}`}
-            tone="green"
+            detail={
+              ledger.health.writeReady === false
+                ? `version ${ledger.health.version} · writes refused`
+                : ledger.health.writeReady === null
+                  ? `version ${ledger.health.version} · write state not reported`
+                  : `version ${ledger.health.version} · writes ready`
+            }
+            tone={ledger.health.writeReady === false ? "red" : "green"}
           />
           <StatCard
             label="Memory kinds"
