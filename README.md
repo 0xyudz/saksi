@@ -37,6 +37,9 @@ Companion documents:
   boundary, rendering, the data model, testing and the failure policy matrix.
 - [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) — the third-party contracts Saksi was built
   against, the exact calls used, and the recorded mainnet proof.
+- [docs/DEMO-VIDEO.md](docs/DEMO-VIDEO.md) — the three-minute demo script: timeline, narration,
+  exact shot list, recording setup and the Q&A answers, including what the video may **not**
+  claim.
 
 ## What is implemented
 
