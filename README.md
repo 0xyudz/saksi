@@ -40,7 +40,7 @@ self-custody browser wallet signing its own payment, not from an operator key.
 Companion documents:
 
 - [docs/BLOG.md](docs/BLOG.md) — technical submission deep-dive: zero-trust forecasting, Walrus Memory as active cognition, Tatum verification, Bayesian learning loops, and bug post-mortem.
-- [docs/DEMO-VIDEO.md](docs/DEMO-VIDEO.md) — three-minute demo script: timeline, narration, exact shot list, recording setup and Q&A bank. Demo video: <https://youtu.be/sHaN5rt7ftc>.
+- **Demo Video (YouTube)** — three-minute walkthrough demonstrating the live app, Walrus Memory relayer, and zero-mismatch reconstruction: <https://youtu.be/sHaN5rt7ftc>.
 - [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md) — how every subsystem works and why each decision was made: identity, sealed picks, scoring, Walrus Memory, Tatum, x402, the HTTP boundary, rendering, the data model, testing and the failure policy matrix.
 - [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) — the third-party contracts Saksi was built against, the exact calls used, and the recorded mainnet proof.
 
