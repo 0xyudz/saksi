@@ -10,6 +10,13 @@ payload is released.
 
 Built for **Total Recall — Tatum × Walrus Memory** (Track 1: Markets & Sports Prediction).
 
+[![Live App](https://img.shields.io/badge/Live%20App-saksi--psi.vercel.app-f59e0b?style=flat-square)](https://saksi-psi.vercel.app)
+[![Demo Video](https://img.shields.io/badge/Demo%20Video-YouTube-red?style=flat-square&logo=youtube)](https://youtu.be/sHaN5rt7ftc)
+[![Technical Deep Dive](https://img.shields.io/badge/Blog-Deep%20Dive-10b981?style=flat-square)](docs/BLOG.md)
+[![Track 1](https://img.shields.io/badge/Track%201-Markets%20%26%20Sports%20Prediction-3b82f6?style=flat-square)](https://tatum.io/hackathon/total-recall)
+
+**[Live Deployment](https://saksi-psi.vercel.app)** · **[Demo Video (YouTube)](https://youtu.be/sHaN5rt7ftc)** · **[Technical Deep Dive (Blog)](docs/BLOG.md)** · **[Public Journals Index](https://saksi-psi.vercel.app/journals)**
+
 ## Status
 
 | Check                                 | Result                                                                       |
@@ -32,14 +39,10 @@ self-custody browser wallet signing its own payment, not from an operator key.
 
 Companion documents:
 
-- [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md) — how every subsystem works and why each
-  decision was made: identity, sealed picks, scoring, Walrus Memory, Tatum, x402, the HTTP
-  boundary, rendering, the data model, testing and the failure policy matrix.
-- [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) — the third-party contracts Saksi was built
-  against, the exact calls used, and the recorded mainnet proof.
-- [docs/DEMO-VIDEO.md](docs/DEMO-VIDEO.md) — the three-minute demo script: timeline, narration,
-  exact shot list, recording setup and the Q&A answers, including what the video may **not**
-  claim.
+- [docs/BLOG.md](docs/BLOG.md) — technical submission deep-dive: zero-trust forecasting, Walrus Memory as active cognition, Tatum verification, Bayesian learning loops, and bug post-mortem.
+- [docs/DEMO-VIDEO.md](docs/DEMO-VIDEO.md) — three-minute demo script: timeline, narration, exact shot list, recording setup and Q&A bank. Demo video: <https://youtu.be/sHaN5rt7ftc>.
+- [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md) — how every subsystem works and why each decision was made: identity, sealed picks, scoring, Walrus Memory, Tatum, x402, the HTTP boundary, rendering, the data model, testing and the failure policy matrix.
+- [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) — the third-party contracts Saksi was built against, the exact calls used, and the recorded mainnet proof.
 
 ## What is implemented
 
@@ -206,6 +209,86 @@ A step-by-step checklist with the full variable list lives in
 [docs/DEPLOY.md](docs/DEPLOY.md).
 
 ## Architecture
+
+### System Architecture
+
+```txt
++---------------------------------------------------------------------------------------+
+|                                    CLIENT LAYER                                       |
+|   Next.js 16 (App Router)   *   Sui Wallet Adapter (@mysten/dapp-kit)   *   x402 Buyer  |
++---------------------------------------------------------------------------------------+
+                                           |
+                                           v
++---------------------------------------------------------------------------------------+
+|                              APPLICATION & SERVER LAYER                               |
+|   - API Guards (Zod strict validation, same-origin checks, in-memory rate limiting)   |
+|   - Cryptographic Commitment Engine (Canonical JSON + SHA-256)                        |
+|   - Bayesian Scoring & Credibility Engine (Wilson Lower Bound + Brier Calibration)    |
+|   - Memory Decision Engine (Autonomous bias detector & verdict intervention)          |
++---------------------------------------------------------------------------------------+
+         |                         |                        |                    |
+         v                         v                        v                    v
++-----------------+      +-------------------+      +---------------+    +--------------+
+|  WALRUS MEMORY  |      |   TATUM GRAPHQL   |      |  ESPN ORACLE  |    |  POSTGRESQL  |
+|     RELAYER     |      |   (sui:mainnet)   |      | (site.api.espn|    | (Ephemeral/  |
+|-----------------|      |-------------------|      | .com, eng.1)  |    |  Security)   |
+| - Deterministic |      | - /graphql        |      |---------------|    |--------------|
+|   single-line   |      | - Checkpoint      |      | - Premier     |    | - challenges |
+|   saksi:v1 text |      | - Transaction     |      |   League live |    | - payments   |
+| - Vector        |      |   balance changes |      |   scoreboard  |    |   digest     |
+|   embeddings    |      | - Status, coin    |      | - Independent |    |   uniqueness |
+|   & cosine recall      |   type & amount   |      |   match-winner|    | - picks (pre-|
+| - Single source |      | - x402 seller     |      |   resolution  |    |   reveal)    |
+|   of truth for  |      |   settlement      |      | - Contradict  |    |              |
+|   all history   |      |   verification    |      |   preservation|    |              |
++-----------------+      +-------------------+      +---------------+    +--------------+
+```
+
+### Prediction Lifecycle & Learning Loop
+
+```txt
+========================================================================================
+                         THE 4-STAGE PREDICTION & LEARNING LOOP
+========================================================================================
+
+  01. SEAL (Before Kickoff)
+  [User Input] --> Canonicalize JSON (lib/canonical.ts: lexicographical keys, strict types)
+               --> Calculate SHA-256 Commitment Hash
+               --> Selection remains strictly PRIVATE
+               --> Write to Walrus Memory:
+                   `saksi:v1|type=pick_commit|...|commitmentHash=<hash>|committedAt=<iso>`
+                                          |
+                                          v
+  02. REVEAL (Post-Kickoff)
+  [User Opens] --> Fetch Stored Payload from DB
+               --> Re-run Canonical SHA-256 Serialization
+               --> Hash Check: Must match exact bytes (Refuses reveal if 1 bit moved)
+               --> Write to Walrus Memory:
+                   `saksi:v1|type=pick_reveal|...|selection=<team>|odds=<val>`
+                                          |
+                                          v
+  03. RESOLVE (Final Whistle)
+  [Resolution] --> Query Live ESPN Scoreboard API (espn:eng.1)
+               --> Match Check:
+                   * Agree    => `oracle_verified` (earned verified credibility score)
+                   * Disagree => `oracle_contradicted` (both verdicts kept, 0 skill credit)
+               --> Calculate Brier Score: (probability - actual)^2
+               --> Write to Walrus Memory:
+                   `saksi:v1|type=outcome|...|result=<win/loss>|brier=<score>`
+                                          |
+                                          v
+  04. RECOGNIZE & INTERVENE (Next Prediction Decision)
+  [Recommender]--> Recalls relevant past memories via Walrus Vector Embeddings
+               --> Autonomous Bias Detection:
+                   * Detects repeated underdog losses (odds >= 2.5) with Laplace smoothing
+                   * Writes `saksi:v1|type=bias|...` to Walrus
+               --> Intervenes on Future Decision:
+                   * Active Verdict Downgrade: proceed -> reduce -> avoid
+                   * Attaches exact Walrus blob ID citation & cosine distance
+========================================================================================
+```
+
+### Codebase Organization
 
 ```txt
 app/                     routing, server components, client forms
